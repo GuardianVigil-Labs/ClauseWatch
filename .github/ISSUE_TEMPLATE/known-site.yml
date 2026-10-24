@@ -1,0 +1,42 @@
+name: Add or fix a known site
+description: A popular service whose terms and privacy policy ClauseWatch should know exactly, or a known site whose addresses are out of date.
+labels: [known-sites]
+body:
+  - type: markdown
+    attributes:
+      value: "Open each address in a private window first: it must open without signing in and show its text without a click. A pull request to rules/sites.json is even better (docs/rules.md#known-sites)."
+  - type: input
+    id: name
+    attributes:
+      label: Service name
+    validations:
+      required: true
+  - type: input
+    id: domains
+    attributes:
+      label: Domains where people use and sign up for it
+      description: Without www., comma-separated.
+    validations:
+      required: true
+  - type: input
+    id: terms
+    attributes:
+      label: Terms of service address (https)
+    validations:
+      required: true
+  - type: input
+    id: privacy
+    attributes:
+      label: Privacy policy address (https)
+    validations:
+      required: true
+  - type: input
+    id: signup
+    attributes:
+      label: Sign-up page address (optional)
+  - type: textarea
+    id: checked
+    attributes:
+      label: What you checked, and when
+    validations:
+      required: true

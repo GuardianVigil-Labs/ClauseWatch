@@ -1,0 +1,10 @@
+node_modules/
+.output/
+dist/
+*.zip
+.env
+.env.*
+.wxt/
+
+rules.signed.json
+.mutation-backup/

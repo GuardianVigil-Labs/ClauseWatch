@@ -1,0 +1,36 @@
+name: build
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # No token on disk while dependencies' install scripts run.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Self-test first: a guard that matches nothing reports success.
+      - run: npm run leak-guard
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run build:firefox
+      - run: npm run check:manifest
+      # Every rule fixture through Go's engine too.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: tools/rulecheck/go.mod
+          cache: false
+      - run: npm run check:rules
+      # Recorded on every PR, in the job summary.
+      - run: npm run size

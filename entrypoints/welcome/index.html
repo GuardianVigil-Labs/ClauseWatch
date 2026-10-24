@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Set up ClauseWatch</title>
+    <link rel="stylesheet" href="../../src/ui/theme.css" />
+    <style>
+      html body { font-size: 14px; }
+      [hidden] { display: none !important; }
+      .frame { max-width: 520px; margin: 32px auto; border: 1px solid var(--line); background: rgba(5, 7, 10, 0.9); }
+      .bar { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); color: var(--ink); }
+      .bar .title { flex: 1; font-weight: 600; }
+      .bar button.skip { background: transparent; border: 0; clip-path: none; color: var(--faint); padding: 2px 4px; font-size: 12px; font-weight: 400; }
+      section.step { padding: 16px; }
+      h1 { font-size: 22px; margin: 0 0 8px; }
+      fieldset { border: 0; padding: 0; margin: 12px 0 0; }
+      legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+      label.choice { display: grid; grid-template-columns: 20px 1fr; gap: 2px 8px; padding: 12px; margin: 0 0 10px; border: 1px solid var(--line); background: var(--raised); cursor: pointer; }
+      label.choice:has(input:checked) { border-color: var(--brand); }
+      label.choice:has(input:disabled) { opacity: 0.6; cursor: default; }
+      label.choice input { margin: 3px 0 0; accent-color: var(--brand); }
+      label.choice strong { color: var(--ink); font-weight: 500; }
+      .default { margin-left: 8px; border: 1px solid #14532d; color: #86efac; background: #052e16; padding: 0 6px; font-size: 11px; font-weight: 400; }
+      .desc { grid-column: 2; color: var(--dim); font-size: 13px; }
+      .leaves { grid-column: 2; border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; font-size: 12px; color: var(--dim); }
+      .leaves b { font-weight: 600; }
+      .leaves.nothing b { color: #4ade80; }
+      .leaves.some b { color: #fbbf24; }
+      .warn { grid-column: 2; color: #fde68a; font-size: 12px; }
+      .box { border: 1px solid var(--line); background: var(--raised); padding: 12px; margin: 12px 0 0; }
+      .box h2 { font-size: 14px; margin: 0 0 4px; }
+      .nav { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 16px; }
+      .nav .note { margin: 0; font-size: 12px; }
+      .note { font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <div class="frame">
+      <div class="bar"><svg class="mark" viewBox="0 0 100 100" width="20" height="20" fill="none" aria-hidden="true"><g stroke="#2f80ff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"><path d="M 50 15 C 59 20 67 22 76 23 L 76 47 C 76 64 65 76 50 84 C 35 76 24 64 24 47 L 24 23 C 33 22 41 20 50 15 Z"/><path d="M 38 58 L 38 51 Q 38 47 42 47 L 43 47"/><path d="M 57 58 L 57 51 Q 57 47 61 47 L 62 47"/></g></svg><span class="title" id="step-title">Setup · 1 of 3</span><button type="button" class="skip" id="skip">Skip</button></div>
+      <section class="step" id="step-1">
+        <h1>Set up <strong>ClauseWatch</strong></h1>
+        <p>ClauseWatch quotes what a service's terms and privacy policy say, before you sign up. Never a score, never "safe". Quotes from the documents, not legal advice.</p>
+        <p class="note">Two choices, about a minute. You can change both later in Settings. ClauseWatch collects nothing about you: no telemetry, no browsing history.</p>
+        <div class="nav"><span></span><button type="button" class="next">Next</button></div>
+      </section>
+      <section class="step" id="step-2" hidden>
+        <h1>Do you want <strong>AI help</strong>?</h1>
+        <p class="note">ClauseWatch always works without AI: its rules find the clauses and quote them. AI can add a short plain-English summary.</p>
+        <fieldset id="ai"><legend>AI help</legend></fieldset>
+        <div class="nav"><button type="button" class="secondary back">Back</button><span class="note">You can change this any time in Settings → AI help.</span><button type="button" class="next">Next</button></div>
+      </section>
+      <section class="step" id="step-3" hidden>
+        <h1>When should ClauseWatch <strong>appear</strong>?</h1>
+        <fieldset id="display"><legend>When ClauseWatch appears</legend></fieldset>
+        <p class="note">Seeing it too often on a site you use every day? Choose "Don't show on this site" on the card. Any time, right-click a terms link or selected text and choose ClauseWatch.</p>
+        <div class="box">
+          <h2>Nothing to switch on for counting</h2>
+          <p class="note">ClauseWatch never sends usage data. Its only regular request is the daily download of the signed rules from the project's GitHub releases, which carries no ID.</p>
+        </div>
+        <p id="status" class="note" aria-live="polite"></p>
+        <div class="nav"><button type="button" class="secondary back">Back</button><button type="button" id="done">Done</button></div>
+      </section>
+    </div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,299 @@
+{
+  "fixtures": {
+    "ai-training-on-user-content": {
+      "match": [
+        "We may use your content to train and improve our machine learning models.",
+        "Content you upload may be used to develop artificial intelligence features.",
+        "You grant us the right to use user inputs to train AI models.",
+        "Nothing in these terms prevents us from using your content to train our machine learning models.",
+        "We prohibit users from using automated tools, and we use your content to train and improve our AI models."
+      ],
+      "noMatch": [
+        "We do not use your content to train our AI models.",
+        "We will never train models on customer data.",
+        "Our engineers train regularly to improve the service.",
+        "We don’t use your content to train our AI models.",
+        "We restrict our AI vendors from training their models on your content or inputs.",
+        "We restrict our AI service providers from training their models on content our customers upload."
+      ]
+    },
+    "binding-arbitration": {
+      "match": [
+        "Any dispute will be resolved by binding arbitration.",
+        "You agree to binding individual arbitration administered by the AAA.",
+        "Disputes go to arbitration, and the arbitrator's decision is final and binding.",
+        "Either party is entitled to seek injunctive relief in court, but all other disputes will be resolved by binding arbitration.",
+        "The company is entitled to binding arbitration of any claim you bring against it.",
+        "Except for complaints under the Data Privacy Framework, all disputes shall be resolved by binding arbitration."
+      ],
+      "noMatch": [
+        "You may bring claims in the courts of your country of residence.",
+        "Arbitration is available if both parties agree, but either may go to court.",
+        "Under certain conditions a person has the option to invoke binding arbitration for unresolved complaints.",
+        "You may elect binding arbitration instead of going to court.",
+        "Once other remedies are exhausted, binding arbitration is available for some leftover complaints under the framework.",
+        "In some cases under the Data Privacy Framework you may be entitled to binding arbitration of your complaint.",
+        "If your complaint is still open, you may also be able to invoke binding arbitration as a last step."
+      ]
+    },
+    "changes-without-notice": {
+      "match": [
+        "We may modify these Terms at any time without notice.",
+        "The Company may change this agreement with or without notice."
+      ],
+      "noMatch": [
+        "We will notify you 30 days before we change these Terms.",
+        "If we update this policy we will email you in advance."
+      ]
+    },
+    "class-action-waiver": {
+      "match": [
+        "You waive any right to participate in a class action lawsuit.",
+        "You may bring claims only on an individual basis and not in any class action."
+      ],
+      "noMatch": [
+        "Nothing here affects your right to join a class action."
+      ]
+    },
+    "effective-on-posting": {
+      "match": [
+        "Changes to these Terms are effective immediately upon posting."
+      ],
+      "noMatch": [
+        "Changes take effect thirty days after we notify you."
+      ]
+    },
+    "ownership-assignment": {
+      "match": [
+        "You hereby assign to us all right, title and interest in any feedback you submit.",
+        "You transfer ownership of your submissions to the Company."
+      ],
+      "noMatch": [
+        "You retain all ownership of your content; we do not claim it.",
+        "We do not claim ownership; you keep your intellectual property."
+      ]
+    },
+    "perpetual-content-licence": {
+      "match": [
+        "You grant us a perpetual, irrevocable license to use your content in any media.",
+        "You give us an irrevocable licence to reproduce content that you post."
+      ],
+      "noMatch": [
+        "You grant us a limited license to host your content while your account is active."
+      ]
+    },
+    "sells-personal-data": {
+      "match": [
+        "We may sell personal information to our partners.",
+        "Personal data may be rented or sold to advertisers.",
+        "Sharing your information with these partners may be considered a sale of personal information under applicable law."
+      ],
+      "noMatch": [
+        "We do not sell your personal information.",
+        "We will never sell personal data.",
+        "Your personal information is not sold to anyone.",
+        "Do Not Sell or Share My Personal Information",
+        "We may share personal data with a buyer during the sale or merger of all or part of our business.",
+        "State law gives you the right to know whether we sell personal information and to opt out of any sales.",
+        "You can opt out of the sale of personal data for targeted advertising.",
+        "You agree not to sell or transfer the personal data of others, for example by selling your contact list."
+      ]
+    },
+    "shares-with-data-brokers": {
+      "match": [
+        "We share information with data brokers and marketing partners."
+      ],
+      "noMatch": [
+        "We do not share information with data brokers."
+      ]
+    },
+    "retains-data-after-closure": {
+      "match": [
+        "We may retain your personal information after you close your account for as long as we see fit.",
+        "Content you post may be kept on our servers even after your account is deleted.",
+        "We store copies of your data following termination of your account.",
+        "Even if you delete your account, some information may remain in our systems for legal and business purposes.",
+        "Following deactivation of your profile, your posts may remain visible to other users.",
+        "Comments you made in public forums will stay visible after your account is closed."
+      ],
+      "noMatch": [
+        "We do not retain your information after you close your account.",
+        "When you close your account, we erase your personal data within 30 days.",
+        "You can keep your account open after the trial ends.",
+        "After you close your account, we delete your personal data and keep no copies.",
+        "We are not able to retain your files after your account is closed.",
+        "We don’t keep your data after you close your account.",
+        "You stay signed in after closing the app, and you can delete your account data from settings.",
+        "We retain your personal data only while your account is active and delete it after you close your account.",
+        "Your files are stored while your account is open and permanently deleted after account closure.",
+        "Once you close your account, your personal data is no longer retained.",
+        "After your account is deleted, no personal information is kept."
+      ]
+    },
+    "shares-data-for-advertising": {
+      "match": [
+        "We share your personal information with advertising partners to show you targeted ads.",
+        "Information about you may be disclosed to ad networks for interest-based advertising.",
+        "We may provide your data to third-party marketing partners.",
+        "We may disclose device identifiers and browsing activity to third-party ad networks for interest-based advertising.",
+        "We do not sell your data, but we share your personal information with advertising partners.",
+        "We may share hashed email addresses with advertising platforms to measure the performance of our campaigns."
+      ],
+      "noMatch": [
+        "We do not share your personal information with advertisers.",
+        "We never disclose your data to ad networks.",
+        "Advertisers may share their own content on our platform.",
+        "We don’t share your personal information with advertisers.",
+        "Your personal information is not shared with advertisers or ad networks.",
+        "Your personal data is never shared with advertising partners.",
+        "Your personal information will not be shared or disclosed to ad networks.",
+        "No personal data is shared with third-party advertisers."
+      ]
+    },
+    "automatic-renewal": {
+      "match": [
+        "Your subscription will automatically renew at the end of each billing period.",
+        "Plans auto-renew and you will be charged the then-current price.",
+        "We will bill you on a recurring basis until you cancel.",
+        "Unless you cancel, your membership continues and we will charge your payment method each month.",
+        "Subscriptions auto‑renew at the then-current rate."
+      ],
+      "noMatch": [
+        "Your subscription will not renew automatically.",
+        "Automatic backups are stored for 30 days.",
+        "You are billed once and this purchase never renews.",
+        "Automatic renewal is off by default, and you will be asked before any further billing.",
+        "Prepaid plans expire at the end of the term and are not automatically renewed.",
+        "We send you an automatic email receipt after each one-time purchase is billed.",
+        "We don’t automatically renew your subscription.",
+        "Subscriptions do not auto-renew and you will not be charged again.",
+        "There is no automatic renewal or recurring billing."
+      ]
+    },
+    "cancellation-notice-period": {
+      "match": [
+        "You must cancel at least 30 days before your renewal date to avoid being charged.",
+        "Cancellation requests must be received no later than 7 business days prior to the billing date.",
+        "To avoid being charged for the next term, you must give us written notice of cancellation thirty days in advance."
+      ],
+      "noMatch": [
+        "You can cancel at any time and your plan ends at the end of the period.",
+        "We will not charge you if you cancel before the renewal date.",
+        "Delivery takes at least 5 days.",
+        "You may cancel at any time before your renewal date to stop the next charge.",
+        "If you cancel within 14 days of purchase, before using the service, you get a full refund.",
+        "To stop the next charge, cancel before the renewal date.",
+        "We will remind you at least 7 days before your trial ends so you can cancel.",
+        "We may cancel events with at least 24 hours’ notice, and you will receive a full refund.",
+        "We will notify you at least 30 days before any price change, and you may cancel before it takes effect.",
+        "We will notify you at least 30 days before your renewal date so you can cancel.",
+        "You may cancel at any time before your renewal date, and we delete your data within 30 days.",
+        "If you cancel before the end of your 14-day free trial, we refund your payment within 5 business days."
+      ]
+    },
+    "limits-liability": {
+      "match": [
+        "In no event shall the company be liable for any indirect or consequential damages.",
+        "Our total liability to you will not exceed the amount you paid us in the last 12 months.",
+        "We disclaim all liability for loss of data.",
+        "We are not responsible for any loss of data, profits or revenue arising from your use of the service.",
+        "The company shall have no liability for any damages resulting from service interruptions.",
+        "We accept no liability for any loss arising from unauthorised access to your account.",
+        "We are not responsible for its content, and our total liability will not exceed fifty dollars.",
+        "You use the app at your own risk and we are not responsible for its content or any loss."
+      ],
+      "noMatch": [
+        "Nothing in these terms limits liability that cannot be limited by law.",
+        "We accept full liability for our own negligence.",
+        "You are responsible for the content you upload.",
+        "Nothing limits your statutory rights or our liability for death or personal injury caused by negligence.",
+        "Some jurisdictions do not allow the exclusion or limitation of liability, so these limits may not apply to you.",
+        "You are liable for any charges incurred on your account up to the limit you set.",
+        "There is no liability on your part for unauthorised charges reported within 60 days.",
+        "We do not limit or exclude our liability for death, personal injury, or fraud.",
+        "You will not be liable for any unauthorized use of your account after you notify us.",
+        "You are not responsible for any unauthorized charges on your account.",
+        "Example Co does not control these partner websites and is not responsible for their privacy practices."
+      ]
+    },
+    "governing-law-and-venue": {
+      "match": [
+        "These terms are governed by the laws of the State of Delaware, without regard to conflict of law principles.",
+        "Any dispute shall be brought exclusively in the courts located in Dublin, Ireland.",
+        "You agree to the exclusive jurisdiction of the courts of England and Wales.",
+        "You agree to submit to the personal jurisdiction of the courts of Ireland for any claim against us.",
+        "All claims arising out of these terms will be litigated exclusively in the federal or state courts of Santa Clara County, California.",
+        "Any legal action must be filed exclusively in the courts of Zurich, Switzerland.",
+        "These terms are governed by the laws of Ireland, including data protection laws, and the courts of Dublin have exclusive jurisdiction.",
+        "This policy is governed by the laws of California, including state privacy laws.",
+        "Nothing here affects your rights under data protection laws; these terms are governed by the laws of England."
+      ],
+      "noMatch": [
+        "These terms are governed by the laws of the country where you live.",
+        "You may bring a claim in the courts of your country of residence.",
+        "Our main office is in Delaware.",
+        "We comply with the laws of every country in which we operate and cooperate with courts there.",
+        "Refund requests are handled exclusively in the app, in line with consumer law.",
+        "If you live in a state governed by a state privacy law, you may have extra rights over your data."
+      ]
+    },
+    "collects-childrens-data": {
+      "match": [
+        "We may collect personal information from children under 13 with parental consent.",
+        "Information from minors who use the service is processed to personalise content.",
+        "We use data about kids' activity to recommend games."
+      ],
+      "noMatch": [
+        "Our service is not directed at children, and we do not knowingly collect their data.",
+        "If we learn that we collected information from a child, we will delete it.",
+        "Children's books are a popular category in our store.",
+        "If you are under 13 you may not use the service or provide us with any information.",
+        "Children under 13 must not use the service, and parents should supervise any information they share.",
+        "If you believe we have collected personal information from a child under 13, please contact us immediately.",
+        "No personal information is knowingly collected from children under 13."
+      ]
+    },
+    "collects-location-or-biometrics": {
+      "match": [
+        "We collect precise location data from your device to provide nearby offers.",
+        "The app may access your GPS position even when it is closed.",
+        "We process biometric identifiers such as face geometry to verify your identity.",
+        "We may create a template of your facial features to verify your identity when you sign in."
+      ],
+      "noMatch": [
+        "We do not collect biometric data.",
+        "We never track your precise location.",
+        "Enter your town to see the local weather.",
+        "We use your location only with your permission, and you can turn location data off at any time.",
+        "Face ID data stays on your device, and the app cannot access your biometric information.",
+        "We don’t collect your precise location or any biometric data."
+      ]
+    },
+    "terminate-without-reason": {
+      "match": [
+        "We may suspend or terminate your account at any time, for any reason, without notice.",
+        "Access to the service may be disabled at our sole discretion.",
+        "We reserve the right to delete accounts without cause.",
+        "We reserve the right to remove your access to the service at our sole discretion.",
+        "We may terminate your account at any time, for any reason, including if you withdraw consent.",
+        "If you revoke your consent, we may suspend your access to the service at any time.",
+        "We may close your account at any time if you withdraw your consent to processing."
+      ],
+      "noMatch": [
+        "You may close your account at any time from the settings page.",
+        "We will not terminate your account without prior notice.",
+        "Accounts that break the rules are suspended after a warning.",
+        "If you want to close your account, you can do so at any time from the settings page.",
+        "We may suspend your account at any time if you breach these terms or break the law.",
+        "Either party may close the account at any time by giving the other party written notice.",
+        "You can remove a device from your account at any time.",
+        "You have the right to close your account at any time.",
+        "You are free to delete your account at any time.",
+        "Users may close or delete their accounts at any time.",
+        "You can deactivate your account at any time from your profile settings.",
+        "You can revoke your consent at any time, though some features of the service may then stop working."
+      ]
+    }
+  },
+  "version": 3
+}

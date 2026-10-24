@@ -1,0 +1,31 @@
+{
+  "name": "clausewatch",
+  "version": "1.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "build:firefox": "wxt build -b firefox --mv3",
+    "typecheck": "wxt prepare && tsc --noEmit",
+    "test": "vitest run",
+    "size": "node scripts/bundle-size.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "mutation": "node scripts/mutate.mjs",
+    "check:manifest": "node scripts/check-manifest.mjs",
+    "check:rules": "node scripts/check-sites.mjs && go -C tools/rulecheck vet ./... && go -C tools/rulecheck test ./... && go -C tools/rulecheck run . ../../rules",
+    "leak-guard": "node scripts/leak-guard.mjs --self-test && node scripts/leak-guard.mjs",
+    "postinstall": "wxt prepare"
+  },
+  "devDependencies": {
+    "happy-dom": "^21.0.1",
+    "playwright": "1.64.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.4",
+    "wxt": "^0.21.4"
+  },
+  "dependencies": {
+    "re2js": "2.8.8"
+  }
+}

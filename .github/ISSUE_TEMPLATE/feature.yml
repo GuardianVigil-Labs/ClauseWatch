@@ -1,0 +1,13 @@
+name: Feature request
+description: An idea for ClauseWatch.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you would like, and why
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: "ClauseWatch quotes; it never scores or calls a service safe, and it collects no telemetry. Ideas that need either will be declined."

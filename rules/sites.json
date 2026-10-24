@@ -1,0 +1,482 @@
+{
+  "sites": [
+    {
+      "id": "airtable",
+      "name": "Airtable",
+      "domains": [
+        "airtable.com"
+      ],
+      "terms": "https://www.airtable.com/company/tos",
+      "privacy": "https://www.airtable.com/company/privacy"
+    },
+    {
+      "id": "anthropic",
+      "name": "Claude (Anthropic)",
+      "domains": [
+        "claude.ai",
+        "anthropic.com"
+      ],
+      "terms": "https://www.anthropic.com/legal/consumer-terms",
+      "privacy": "https://www.anthropic.com/legal/privacy"
+    },
+    {
+      "id": "asana",
+      "name": "Asana",
+      "domains": [
+        "asana.com"
+      ],
+      "terms": "https://asana.com/terms/terms-of-service",
+      "privacy": "https://asana.com/terms/privacy-statement"
+    },
+    {
+      "id": "atlassian",
+      "name": "Atlassian (Bitbucket, Jira, Confluence)",
+      "domains": [
+        "atlassian.com",
+        "bitbucket.org"
+      ],
+      "terms": "https://www.atlassian.com/legal/atlassian-customer-agreement",
+      "privacy": "https://www.atlassian.com/legal/privacy-policy"
+    },
+    {
+      "id": "calendly",
+      "name": "Calendly",
+      "domains": [
+        "calendly.com"
+      ],
+      "terms": "https://calendly.com/legal/customer-terms-conditions",
+      "privacy": "https://calendly.com/legal/privacy-notice",
+      "signup": [
+        "https://calendly.com/signup"
+      ]
+    },
+    {
+      "id": "clickup",
+      "name": "ClickUp",
+      "domains": [
+        "clickup.com"
+      ],
+      "terms": "https://clickup.com/terms",
+      "privacy": "https://clickup.com/terms/privacy",
+      "signup": [
+        "https://app.clickup.com/signup"
+      ]
+    },
+    {
+      "id": "cloudflare",
+      "name": "Cloudflare",
+      "domains": [
+        "cloudflare.com"
+      ],
+      "terms": "https://www.cloudflare.com/terms/",
+      "privacy": "https://www.cloudflare.com/privacypolicy/"
+    },
+    {
+      "id": "cursor",
+      "name": "Cursor",
+      "domains": [
+        "cursor.com"
+      ],
+      "terms": "https://cursor.com/terms-of-service",
+      "privacy": "https://cursor.com/privacy"
+    },
+    {
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "domains": [
+        "deepseek.com"
+      ],
+      "terms": "https://cdn.deepseek.com/policies/en-US/deepseek-terms-of-use.html",
+      "privacy": "https://cdn.deepseek.com/policies/en-US/deepseek-privacy-policy.html",
+      "signup": [
+        "https://chat.deepseek.com/sign_up"
+      ]
+    },
+    {
+      "id": "digitalocean",
+      "name": "DigitalOcean",
+      "domains": [
+        "digitalocean.com"
+      ],
+      "terms": "https://www.digitalocean.com/legal/terms-of-service-agreement",
+      "privacy": "https://www.digitalocean.com/legal/privacy-policy"
+    },
+    {
+      "id": "discord",
+      "name": "Discord",
+      "domains": [
+        "discord.com"
+      ],
+      "terms": "https://discord.com/terms",
+      "privacy": "https://discord.com/privacy",
+      "signup": [
+        "https://discord.com/register"
+      ]
+    },
+    {
+      "id": "dropbox",
+      "name": "Dropbox",
+      "domains": [
+        "dropbox.com"
+      ],
+      "terms": "https://www.dropbox.com/terms",
+      "privacy": "https://www.dropbox.com/privacy",
+      "signup": [
+        "https://www.dropbox.com/register"
+      ]
+    },
+    {
+      "id": "figma",
+      "name": "Figma",
+      "domains": [
+        "figma.com"
+      ],
+      "terms": "https://www.figma.com/legal/tos/",
+      "privacy": "https://www.figma.com/legal/privacy/",
+      "signup": [
+        "https://www.figma.com/signup"
+      ]
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "domains": [
+        "github.com"
+      ],
+      "terms": "https://docs.github.com/en/site-policy/github-terms/github-terms-of-service",
+      "privacy": "https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement"
+    },
+    {
+      "id": "google-gemini",
+      "name": "Google Gemini",
+      "domains": [
+        "google.com"
+      ],
+      "terms": "https://policies.google.com/terms",
+      "privacy": "https://policies.google.com/privacy"
+    },
+    {
+      "id": "grammarly",
+      "name": "Grammarly",
+      "domains": [
+        "grammarly.com"
+      ],
+      "legalDomains": [
+        "superhuman.com"
+      ],
+      "terms": "https://www.grammarly.com/terms",
+      "privacy": "https://superhuman.com/legal/privacy-policy",
+      "signup": [
+        "https://www.grammarly.com/signup"
+      ]
+    },
+    {
+      "id": "hubspot",
+      "name": "HubSpot",
+      "domains": [
+        "hubspot.com"
+      ],
+      "terms": "https://legal.hubspot.com/terms-of-service",
+      "privacy": "https://legal.hubspot.com/privacy-policy",
+      "signup": [
+        "https://app.hubspot.com/signup-hubspot"
+      ]
+    },
+    {
+      "id": "huggingface",
+      "name": "Hugging Face",
+      "domains": [
+        "huggingface.co"
+      ],
+      "terms": "https://huggingface.co/terms-of-service",
+      "privacy": "https://huggingface.co/privacy",
+      "signup": [
+        "https://huggingface.co/join"
+      ]
+    },
+    {
+      "id": "linkedin",
+      "name": "LinkedIn",
+      "domains": [
+        "linkedin.com"
+      ],
+      "terms": "https://www.linkedin.com/legal/user-agreement",
+      "privacy": "https://www.linkedin.com/legal/privacy-policy",
+      "signup": [
+        "https://www.linkedin.com/signup"
+      ]
+    },
+    {
+      "id": "loom",
+      "name": "Loom",
+      "domains": [
+        "loom.com"
+      ],
+      "legalDomains": [
+        "atlassian.com"
+      ],
+      "terms": "https://www.atlassian.com/legal/atlassian-customer-agreement",
+      "privacy": "https://www.atlassian.com/legal/privacy-policy"
+    },
+    {
+      "id": "mailchimp",
+      "name": "Mailchimp",
+      "domains": [
+        "mailchimp.com"
+      ],
+      "legalDomains": [
+        "intuit.com"
+      ],
+      "terms": "https://mailchimp.com/legal/terms/",
+      "privacy": "https://www.intuit.com/privacy/statement/",
+      "signup": [
+        "https://login.mailchimp.com/signup/"
+      ]
+    },
+    {
+      "id": "microsoft-copilot",
+      "name": "Microsoft Copilot",
+      "domains": [
+        "microsoft.com"
+      ],
+      "terms": "https://www.microsoft.com/servicesagreement",
+      "privacy": "https://privacy.microsoft.com/privacystatement"
+    },
+    {
+      "id": "miro",
+      "name": "Miro",
+      "domains": [
+        "miro.com"
+      ],
+      "terms": "https://miro.com/legal/terms-of-service/",
+      "privacy": "https://miro.com/legal/privacy-policy/",
+      "signup": [
+        "https://miro.com/signup/"
+      ]
+    },
+    {
+      "id": "mistral",
+      "name": "Mistral Le Chat",
+      "domains": [
+        "mistral.ai"
+      ],
+      "terms": "https://legal.mistral.ai/terms/row-consumer-terms/",
+      "privacy": "https://legal.mistral.ai/terms/privacy-policy/"
+    },
+    {
+      "id": "monday",
+      "name": "monday.com",
+      "domains": [
+        "monday.com"
+      ],
+      "terms": "https://monday.com/l/legal/tos/",
+      "privacy": "https://monday.com/l/privacy/privacy-policy/"
+    },
+    {
+      "id": "netflix",
+      "name": "Netflix",
+      "domains": [
+        "netflix.com"
+      ],
+      "terms": "https://help.netflix.com/legal/termsofuse",
+      "privacy": "https://help.netflix.com/legal/privacy",
+      "signup": [
+        "https://www.netflix.com/signup"
+      ]
+    },
+    {
+      "id": "netlify",
+      "name": "Netlify",
+      "domains": [
+        "netlify.com"
+      ],
+      "terms": "https://www.netlify.com/legal/self-serve-subscription-agreement/",
+      "privacy": "https://www.netlify.com/privacy/",
+      "signup": [
+        "https://app.netlify.com/signup"
+      ]
+    },
+    {
+      "id": "otter",
+      "name": "Otter.ai",
+      "domains": [
+        "otter.ai"
+      ],
+      "terms": "https://otter.ai/terms-of-service",
+      "privacy": "https://otter.ai/privacy-policy",
+      "signup": [
+        "https://otter.ai/signup"
+      ]
+    },
+    {
+      "id": "perplexity",
+      "name": "Perplexity",
+      "domains": [
+        "perplexity.ai"
+      ],
+      "terms": "https://www.perplexity.ai/hub/legal/terms-of-service",
+      "privacy": "https://www.perplexity.ai/hub/legal/privacy-notice"
+    },
+    {
+      "id": "pinterest",
+      "name": "Pinterest",
+      "domains": [
+        "pinterest.com"
+      ],
+      "terms": "https://policy.pinterest.com/terms-of-service",
+      "privacy": "https://policy.pinterest.com/privacy-policy"
+    },
+    {
+      "id": "poe",
+      "name": "Poe",
+      "domains": [
+        "poe.com"
+      ],
+      "terms": "https://poe.com/pages/tos",
+      "privacy": "https://poe.com/pages/privacy"
+    },
+    {
+      "id": "shopify",
+      "name": "Shopify",
+      "domains": [
+        "shopify.com"
+      ],
+      "terms": "https://www.shopify.com/legal/terms",
+      "privacy": "https://www.shopify.com/legal/privacy"
+    },
+    {
+      "id": "slack",
+      "name": "Slack",
+      "domains": [
+        "slack.com"
+      ],
+      "terms": "https://slack.com/terms-of-service/user",
+      "privacy": "https://slack.com/trust/privacy/privacy-policy"
+    },
+    {
+      "id": "spotify",
+      "name": "Spotify",
+      "domains": [
+        "spotify.com"
+      ],
+      "terms": "https://www.spotify.com/legal/end-user-agreement/",
+      "privacy": "https://www.spotify.com/legal/privacy-policy/"
+    },
+    {
+      "id": "squarespace",
+      "name": "Squarespace",
+      "domains": [
+        "squarespace.com"
+      ],
+      "terms": "https://www.squarespace.com/terms-of-service",
+      "privacy": "https://www.squarespace.com/privacy"
+    },
+    {
+      "id": "stripe",
+      "name": "Stripe",
+      "domains": [
+        "stripe.com"
+      ],
+      "terms": "https://stripe.com/legal/ssa",
+      "privacy": "https://stripe.com/privacy",
+      "signup": [
+        "https://dashboard.stripe.com/register"
+      ]
+    },
+    {
+      "id": "tiktok",
+      "name": "TikTok",
+      "domains": [
+        "tiktok.com"
+      ],
+      "terms": "https://www.tiktok.com/legal/terms-of-service",
+      "privacy": "https://www.tiktok.com/legal/privacy-policy",
+      "signup": [
+        "https://www.tiktok.com/signup"
+      ]
+    },
+    {
+      "id": "trello",
+      "name": "Trello",
+      "domains": [
+        "trello.com"
+      ],
+      "legalDomains": [
+        "atlassian.com"
+      ],
+      "terms": "https://www.atlassian.com/legal/atlassian-customer-agreement",
+      "privacy": "https://www.atlassian.com/legal/privacy-policy"
+    },
+    {
+      "id": "twilio",
+      "name": "Twilio",
+      "domains": [
+        "twilio.com"
+      ],
+      "terms": "https://www.twilio.com/legal/tos",
+      "privacy": "https://www.twilio.com/legal/privacy"
+    },
+    {
+      "id": "vercel",
+      "name": "Vercel",
+      "domains": [
+        "vercel.com"
+      ],
+      "terms": "https://vercel.com/legal/terms",
+      "privacy": "https://vercel.com/legal/privacy-notice",
+      "signup": [
+        "https://vercel.com/signup"
+      ]
+    },
+    {
+      "id": "webflow",
+      "name": "Webflow",
+      "domains": [
+        "webflow.com"
+      ],
+      "terms": "https://webflow.com/legal/terms",
+      "privacy": "https://webflow.com/legal/privacy"
+    },
+    {
+      "id": "wix",
+      "name": "Wix",
+      "domains": [
+        "wix.com"
+      ],
+      "terms": "https://www.wix.com/about/terms-of-use",
+      "privacy": "https://www.wix.com/about/privacy"
+    },
+    {
+      "id": "x",
+      "name": "X (Twitter)",
+      "domains": [
+        "x.com",
+        "twitter.com"
+      ],
+      "terms": "https://x.com/tos",
+      "privacy": "https://x.com/privacy"
+    },
+    {
+      "id": "zapier",
+      "name": "Zapier",
+      "domains": [
+        "zapier.com"
+      ],
+      "terms": "https://zapier.com/legal/terms-of-service",
+      "privacy": "https://zapier.com/privacy"
+    },
+    {
+      "id": "zoom",
+      "name": "Zoom",
+      "domains": [
+        "zoom.us",
+        "zoom.com"
+      ],
+      "terms": "https://www.zoom.com/en/trust/terms/",
+      "privacy": "https://www.zoom.com/en/trust/privacy/privacy-statement/",
+      "signup": [
+        "https://zoom.us/signup"
+      ]
+    }
+  ]
+}

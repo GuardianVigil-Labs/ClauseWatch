@@ -1,0 +1,9 @@
+# GitHub Pages (built in, no extra tools): the public documentation site.
+# Publish from the public repository: Settings → Pages → Deploy from a branch → main, /docs.
+title: ClauseWatch
+description: Quotes what a service's terms and privacy policy say, before you sign up.
+theme: jekyll-theme-primer
+# Maintainer documents stay in the repository but are not published.
+exclude:
+  - STORE_LISTING.md
+  - store/

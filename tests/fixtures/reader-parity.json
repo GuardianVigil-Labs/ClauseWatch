@@ -1,0 +1,314 @@
+{
+ "about": "How a page becomes text: the body and each clause's start (code points). Every implementation of docs/reader.md must read every case the same way.",
+ "cases": [
+  {
+   "name": "an inline link adds no space before the comma",
+   "html": "\u003cp\u003eYour information is \u003ca href=\"/x\"\u003ecollected\u003c/a\u003e, stored and used as this section describes.\u003c/p\u003e",
+   "body": "Your information is collected, stored and used as this section describes.",
+   "starts": [
+    0
+   ]
+  },
+  {
+   "name": "a word split by an inline tag stays whole",
+   "html": "\u003cp\u003eWe may share data with our part\u003cb\u003ener\u003c/b\u003es for the purposes this notice describes.\u003c/p\u003e",
+   "body": "We may share data with our partners for the purposes this notice describes.",
+   "starts": [
+    0
+   ]
+  },
+  {
+   "name": "inline pieces keep only the spaces the page has",
+   "html": "\u003cp\u003e\u003cspan\u003eWe may\u003c/span\u003e \u003cspan\u003esell\u003c/span\u003e your personal information to third parties\u003cem\u003e.\u003c/em\u003e\u003c/p\u003e",
+   "body": "We may sell your personal information to third parties.",
+   "starts": [
+    0
+   ]
+  },
+  {
+   "name": "entities and non-breaking spaces",
+   "html": "\u003cp\u003eTerms \u0026amp; Conditions apply\u0026nbsp;to every account you open with the service.\u003c/p\u003e",
+   "body": "Terms \u0026 Conditions apply to every account you open with the service.",
+   "starts": [
+    0
+   ]
+  },
+  {
+   "name": "a short heading joins the next block on its own line",
+   "html": "\u003ch2\u003eData\u003c/h2\u003e\u003cp\u003eWe agree that this sentence is long enough to stand on its own as a clause.\u003c/p\u003e\u003cp\u003eLine one of an address block\u003cbr\u003eLine two of the same address block here\u003c/p\u003e",
+   "body": "Data\nWe agree that this sentence is long enough to stand on its own as a clause.\n\nLine one of an address block\nLine two of the same address block here",
+   "starts": [
+    0,
+    82
+   ]
+  },
+  {
+   "name": "a dialog by role is not read",
+   "html": "\u003cdiv role=\"dialog\" aria-label=\"Privacy choices\"\u003e\u003cp\u003eWe may share your personal data with advertising partners if you accept.\u003c/p\u003e\u003c/div\u003e\u003cp\u003eWe agree that this sentence is long enough to stand on its own as a clause.\u003c/p\u003e",
+   "body": "We agree that this sentence is long enough to stand on its own as a clause.",
+   "starts": [
+    0
+   ]
+  },
+  {
+   "name": "an alert dialog with nested blocks is skipped whole, and what follows is read",
+   "html": "\u003cdiv role=\"alertdialog\"\u003e\u003cdiv\u003e\u003cp\u003eWe may sell your personal information when you click accept below.\u003c/p\u003e\u003c/div\u003e\u003cp\u003eManage your choices in the preferences panel of this window.\u003c/p\u003e\u003c/div\u003e\u003cp\u003eWe agree that this sentence is long enough to stand on its own as a clause.\u003c/p\u003e",
+   "body": "We agree that this sentence is long enough to stand on its own as a clause.",
+   "starts": [
+    0
+   ]
+  },
+  {
+   "name": "aria-modal and the dialog element are not read",
+   "html": "\u003csection aria-modal=\"true\"\u003e\u003cp\u003eWe may share your personal data with advertising partners if you accept.\u003c/p\u003e\u003c/section\u003e\u003cdialog open\u003e\u003cp\u003eWe may sell your personal information when you click accept below.\u003c/p\u003e\u003c/dialog\u003e\u003cp\u003eWe agree that this sentence is long enough to stand on its own as a clause.\u003c/p\u003e",
+   "body": "We agree that this sentence is long enough to stand on its own as a clause.",
+   "starts": [
+    0
+   ]
+  },
+  {
+   "name": "a cookies section of the policy itself is read",
+   "html": "\u003csection id=\"cookies\" class=\"policy-cookies\"\u003e\u003ch2\u003eCookies\u003c/h2\u003e\u003cp\u003eWe use cookies to remember your settings and to measure how the service is used.\u003c/p\u003e\u003c/section\u003e",
+   "body": "Cookies\nWe use cookies to remember your settings and to measure how the service is used.",
+   "starts": [
+    0
+   ]
+  },
+  {
+   "name": "a consent banner with a control, named by id, class or label, is not read",
+   "html": "\u003cdiv id=\"cookie-banner\"\u003e\u003cp\u003eWe may share your personal data with advertising partners if you accept.\u003c/p\u003e\u003cbutton\u003eAccept\u003c/button\u003e\u003c/div\u003e\u003cdiv class=\"site consent-manager\"\u003e\u003cp\u003eWe may sell your personal information when you click accept below.\u003c/p\u003e\u003cspan role=\"button\"\u003eOK\u003c/span\u003e\u003c/div\u003e\u003caside aria-label=\"Cookie preferences\"\u003e\u003cp\u003eWe use tracking technologies across this site for measurement purposes.\u003c/p\u003e\u003cinput type=\"checkbox\"\u003e\u003c/aside\u003e\u003cp\u003eWe agree that this sentence is long enough to stand on its own as a clause.\u003c/p\u003e",
+   "body": "We agree that this sentence is long enough to stand on its own as a clause.",
+   "starts": [
+    0
+   ]
+  },
+  {
+   "name": "a consent-named element with no control is read",
+   "html": "\u003cdiv id=\"cookie-notice\"\u003e\u003cp\u003eWe use cookies to remember your settings and to measure how the service is used.\u003c/p\u003e\u003c/div\u003e",
+   "body": "We use cookies to remember your settings and to measure how the service is used.",
+   "starts": [
+    0
+   ]
+  },
+  {
+   "name": "a cookie notice section inside the policy is read",
+   "html": "\u003cmain\u003e\u003csection id=\"cookie-notice\"\u003e\u003ch2\u003eCookie Notice\u003c/h2\u003e\u003cp\u003eWe share your personal data with advertising partners to show you targeted ads.\u003c/p\u003e\u003cbutton\u003eManage\u003c/button\u003e\u003c/section\u003e\u003c/main\u003e",
+   "body": "Cookie Notice\nWe share your personal data with advertising partners to show you targeted ads.",
+   "starts": [
+    0
+   ]
+  },
+  {
+   "name": "a consent-named element with a heading or long text is read",
+   "html": "\u003cdiv class=\"cookie-banner\"\u003e\u003ch3\u003eCookies\u003c/h3\u003e\u003cp\u003eWe share your personal data with advertising partners to show you targeted ads.\u003c/p\u003e\u003cbutton\u003eOK\u003c/button\u003e\u003c/div\u003e",
+   "body": "Cookies\nWe share your personal data with advertising partners to show you targeted ads.",
+   "starts": [
+    0
+   ]
+  },
+  {
+   "name": "a consent-named link, image or input never hides the page",
+   "html": "\u003chtml\u003e\u003chead\u003e\u003clink id=\"cookie-notice-front-css\" rel=\"stylesheet\" href=\"/c.css\"\u003e\u003c/head\u003e\u003cbody\u003e\u003cp\u003eWe agree that this sentence is long enough to stand on its own as a clause.\u003c/p\u003e\u003cimg class=\"consent-banner-logo\" src=\"/l.png\"\u003e\u003cp\u003eSecond clause of this page, also long enough to stand alone here.\u003c/p\u003e\u003cinput id=\"consent-prompt-box\"\u003e\u003cp\u003eThird clause of this page, again long enough to stand alone here.\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+   "body": "We agree that this sentence is long enough to stand on its own as a clause.\n\nSecond clause of this page, also long enough to stand alone here.\n\nThird clause of this page, again long enough to stand alone here.",
+   "starts": [
+    0,
+    77,
+    144
+   ]
+  },
+  {
+   "name": "a self-closing dialog opens as the browser opens it",
+   "html": "\u003csection\u003e\u003cdiv role=\"dialog\"/\u003e\u003cp\u003eWe may sell your personal information when you click accept below.\u003c/p\u003e\u003c/section\u003e\u003cp\u003eWe agree that this sentence is long enough to stand on its own as a clause.\u003c/p\u003e",
+   "body": "We agree that this sentence is long enough to stand on its own as a clause.",
+   "starts": [
+    0
+   ]
+  },
+  {
+   "name": "a rule, a summary and a figure caption end a block",
+   "html": "\u003cp\u003eThe first part of this clause ends right here\u003chr\u003esecond part of the clause starts after the rule.\u003c/p\u003e\u003cdetails\u003e\u003csummary\u003eShort summary of the section below\u003c/summary\u003e\u003cp\u003eWe agree that this sentence is long enough to stand on its own as a clause.\u003c/p\u003e\u003c/details\u003e\u003cfigure\u003e\u003cimg src=\"/x.png\"\u003e\u003cfigcaption\u003eA caption that describes the figure shown above.\u003c/figcaption\u003e\u003c/figure\u003e",
+   "body": "The first part of this clause ends right here\n\nsecond part of the clause starts after the rule.\n\nShort summary of the section below\nWe agree that this sentence is long enough to stand on its own as a clause.\n\nA caption that describes the figure shown above.",
+   "starts": [
+    0,
+    47,
+    97,
+    209
+   ]
+  },
+  {
+   "name": "a dialog inside a paragraph keeps the text around it apart",
+   "html": "\u003cp\u003eThe first half of this paragraph comes before\u003cspan role=\"dialog\"\u003eAccept all cookies\u003c/span\u003ethe second half that comes after the dialog.\u003c/p\u003e",
+   "body": "The first half of this paragraph comes before\n\nthe second half that comes after the dialog.",
+   "starts": [
+    0,
+    47
+   ]
+  },
+  {
+   "name": "a consent banner inside an article is read",
+   "html": "\u003carticle\u003e\u003cdiv class=\"cookie-banner\"\u003e\u003cp\u003eWe share your personal data with advertising partners to show you targeted ads.\u003c/p\u003e\u003cbutton\u003eOK\u003c/button\u003e\u003c/div\u003e\u003c/article\u003e",
+   "body": "We share your personal data with advertising partners to show you targeted ads.",
+   "starts": [
+    0
+   ]
+  },
+  {
+   "name": "a consent-named element with a control but more than 80 words is read",
+   "html": "\u003cdiv id=\"consent-notice\"\u003e\u003cp\u003eWe may share your personal data with partners for many purposes We may share your personal data with partners for many purposes We may share your personal data with partners for many purposes We may share your personal data with partners for many purposes We may share your personal data with partners for many purposes We may share your personal data with partners for many purposes We may share your personal data with partners for many purposes We may share your personal data with partners for many purposes We may share your personal data with partners for many purposes.\u003c/p\u003e\u003cbutton\u003eOK\u003c/button\u003e\u003c/div\u003e",
+   "body": "We may share your personal data with partners for many purposes We may share your personal data with partners for many purposes We may share your personal data with partners for many purposes We may share your personal data with partners for many purposes We may share your personal data with partners for many purposes We may share your personal data with partners for many purposes We may share your personal data with partners for many purposes We may share your personal data with partners for many purposes We may share your personal data with partners for many purposes.",
+   "starts": [
+    0
+   ]
+  },
+  {
+   "name": "a skipped form keeps the text around it apart",
+   "html": "\u003cdiv\u003eThe words before the form end right here\u003cspan\u003e\u003cform\u003e\u003cinput name=\"q\"\u003e\u003c/form\u003e\u003c/span\u003eand the words after the form start here.\u003c/div\u003e",
+   "body": "The words before the form end right here\n\nand the words after the form start here.",
+   "starts": [
+    0,
+    42
+   ]
+  },
+  {
+   "name": "a summary ends a block even without a paragraph after it",
+   "html": "\u003cdetails\u003e\u003csummary\u003eThe summary line of this section is here\u003c/summary\u003eThe details text follows directly after the summary line.\u003c/details\u003e",
+   "body": "The summary line of this section is here\n\nThe details text follows directly after the summary line.",
+   "starts": [
+    0,
+    42
+   ]
+  },
+  {
+   "name": "a rule outside a paragraph ends a block",
+   "html": "\u003cdiv\u003eThe words before the rule end right here\u003chr\u003eand the words after the rule start here.\u003c/div\u003e",
+   "body": "The words before the rule end right here\n\nand the words after the rule start here.",
+   "starts": [
+    0,
+    42
+   ]
+  },
+  {
+   "name": "an image inside a sentence never splits it",
+   "html": "\u003cp\u003eText before the picture \u003cimg src=\"/a.png\"\u003e and text after it, all in the same clause here.\u003c/p\u003e",
+   "body": "Text before the picture and text after it, all in the same clause here.",
+   "starts": [
+    0
+   ]
+  },
+  {
+   "name": "a consent banner of exactly 80 words with a control is not read",
+   "html": "\u003cdiv class=\"cookie-banner\"\u003e\u003cp\u003eword word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word \u003c/p\u003e\u003cbutton\u003eOK\u003c/button\u003e\u003c/div\u003e\u003cp\u003eWe agree that this sentence is long enough to stand on its own as a clause.\u003c/p\u003e",
+   "body": "We agree that this sentence is long enough to stand on its own as a clause.",
+   "starts": [
+    0
+   ]
+  },
+  {
+   "name": "a dialog wrapping an article is read",
+   "html": "\u003cdiv role=\"dialog\"\u003e\u003carticle\u003e\u003cp\u003eAny dispute arising from these terms will be resolved by binding arbitration rather than in court.\u003c/p\u003e\u003c/article\u003e\u003c/div\u003e",
+   "body": "Any dispute arising from these terms will be resolved by binding arbitration rather than in court.",
+   "starts": [
+    0
+   ]
+  },
+  {
+   "name": "an aria-modal element with a heading is read",
+   "html": "\u003cmain\u003e\u003csection aria-modal=\"true\"\u003e\u003ch1\u003eTerms of Service\u003c/h1\u003e\u003cp\u003eAny dispute arising from these terms will be resolved by binding arbitration rather than in court.\u003c/p\u003e\u003c/section\u003e\u003c/main\u003e",
+   "body": "Terms of Service\nAny dispute arising from these terms will be resolved by binding arbitration rather than in court.",
+   "starts": [
+    0
+   ]
+  },
+  {
+   "name": "an app root marked as a dialog around main is read",
+   "html": "\u003cdiv id=\"root\" role=\"dialog\"\u003e\u003cmain\u003e\u003cp\u003eAny dispute arising from these terms will be resolved by binding arbitration rather than in court.\u003c/p\u003e\u003c/main\u003e\u003c/div\u003e",
+   "body": "Any dispute arising from these terms will be resolved by binding arbitration rather than in court.",
+   "starts": [
+    0
+   ]
+  },
+  {
+   "name": "html marked aria-modal is read",
+   "html": "\u003chtml aria-modal=\"true\"\u003e\u003cbody\u003e\u003cp\u003eAny dispute arising from these terms will be resolved by binding arbitration rather than in court.\u003c/p\u003e\u003c/body\u003e\u003c/html\u003e",
+   "body": "Any dispute arising from these terms will be resolved by binding arbitration rather than in court.",
+   "starts": [
+    0
+   ]
+  },
+  {
+   "name": "a control inside a template does not make a banner",
+   "html": "\u003cdiv class=\"cookie-banner\"\u003e\u003cp\u003eWe use cookies to remember your settings on this site.\u003c/p\u003e\u003ctemplate\u003e\u003cbutton\u003eOK\u003c/button\u003e\u003c/template\u003e\u003c/div\u003e",
+   "body": "We use cookies to remember your settings on this site.",
+   "starts": [
+    0
+   ]
+  },
+  {
+   "name": "names are matched on ASCII letters only",
+   "html": "\u003cdiv class=\"cooKie-banner\"\u003e\u003cp\u003eWe use cookies to remember your settings on this site.\u003c/p\u003e\u003cbutton\u003eOK\u003c/button\u003e\u003c/div\u003e\u003cdiv class=\"conſent-banner\"\u003e\u003cp\u003eWe measure how the service is used across this site.\u003c/p\u003e\u003cbutton\u003eOK\u003c/button\u003e\u003c/div\u003e",
+   "body": "We use cookies to remember your settings on this site.\n\nWe measure how the service is used across this site.",
+   "starts": [
+    0,
+    56
+   ]
+  },
+  {
+   "name": "attribute values are trimmed of ASCII whitespace only",
+   "html": "\u003cdiv role=\"dialog \"\u003e\u003cp\u003eWe may share your personal data with advertising partners if you accept.\u003c/p\u003e\u003c/div\u003e\u003cdiv role=\"\tDIALOG\n\"\u003e\u003cp\u003eWe may sell your personal information when you click accept below.\u003c/p\u003e\u003c/div\u003e\u003cp\u003eWe agree that this sentence is long enough to stand on its own as a clause.\u003c/p\u003e",
+   "body": "We may share your personal data with advertising partners if you accept.\n\nWe agree that this sentence is long enough to stand on its own as a clause.",
+   "starts": [
+    0,
+    74
+   ]
+  },
+  {
+   "name": "words are counted on ASCII whitespace only",
+   "html": "\u003cdiv class=\"cookie-banner\"\u003e\u003cp\u003eword word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word\u003c/p\u003e\u003cbutton\u003eOK\u003c/button\u003e\u003c/div\u003e\u003cp\u003eWe agree that this sentence is long enough to stand on its own as a clause.\u003c/p\u003e",
+   "body": "We agree that this sentence is long enough to stand on its own as a clause.",
+   "starts": [
+    0
+   ]
+  },
+  {
+   "name": "main and body are never skipped as dialogs",
+   "html": "\u003cbody aria-modal=\"true\"\u003e\u003cmain role=\"dialog\"\u003e\u003cp\u003eAny dispute will be resolved by binding arbitration rather than in court.\u003c/p\u003e\u003c/main\u003e\u003c/body\u003e",
+   "body": "Any dispute will be resolved by binding arbitration rather than in court.",
+   "starts": [
+    0
+   ]
+  },
+  {
+   "name": "a long consent preference centre with headings is not read",
+   "html": "\u003cdiv id=\"site-consent-sdk\"\u003e\u003cdiv role=\"dialog\" aria-modal=\"true\"\u003e\u003ch2\u003ePrivacy preference centre\u003c/h2\u003e\u003cp\u003eWe and our partners use technologies to store and access information on your device for measurement. We and our partners use technologies to store and access information on your device for measurement. We and our partners use technologies to store and access information on your device for measurement. We and our partners use technologies to store and access information on your device for measurement. We and our partners use technologies to store and access information on your device for measurement. We and our partners use technologies to store and access information on your device for measurement.\u003c/p\u003e\u003cbutton\u003eSave\u003c/button\u003e\u003c/div\u003e\u003c/div\u003e\u003cp\u003eWe agree that this sentence is long enough to stand on its own as a clause.\u003c/p\u003e",
+   "body": "We agree that this sentence is long enough to stand on its own as a clause.",
+   "starts": [
+    0
+   ]
+  },
+  {
+   "name": "a banner whose control comes before more than 80 words is read",
+   "html": "\u003cdiv class=\"cookie-banner\"\u003e\u003cbutton\u003eOK\u003c/button\u003e\u003cp\u003eword word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word\u003c/p\u003e\u003c/div\u003e",
+   "body": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word",
+   "starts": [
+    0
+   ]
+  },
+  {
+   "name": "the first word of a banner counts, so 81 words are read",
+   "html": "\u003cdiv class=\"cookie-banner\"\u003e\u003cp\u003eword word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word \u003c/p\u003e\u003cspan role=\"button\"\u003eOK\u003c/span\u003e\u003c/div\u003e\u003cp\u003eWe agree that this sentence is long enough to stand on its own as a clause.\u003c/p\u003e",
+   "body": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word\n\nOK\nWe agree that this sentence is long enough to stand on its own as a clause.",
+   "starts": [
+    0,
+    401
+   ]
+  },
+  {
+   "name": "words that end a text node are counted once",
+   "html": "\u003cdiv class=\"cookie-banner\"\u003e\u003cp\u003eword word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word \u003c/p\u003e\u003cbutton\u003e OK\u003c/button\u003e\u003c/div\u003e\u003cp\u003eWe agree that this sentence is long enough to stand on its own as a clause.\u003c/p\u003e",
+   "body": "We agree that this sentence is long enough to stand on its own as a clause.",
+   "starts": [
+    0
+   ]
+  }
+ ]
+}

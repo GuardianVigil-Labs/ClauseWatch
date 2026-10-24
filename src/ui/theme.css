@@ -1,0 +1,101 @@
+/*
+ * ClauseWatch's look, for the extension's own pages.
+ * Dark only. Fonts are bundled (public/fonts, SIL OFL): no request to any font
+ * host. The page card and <cw-report> live in shadow roots on other sites and
+ * repeat the colours there; on a web page they fall back to the system font,
+ * so no font file is exposed to pages.
+ */
+@font-face {
+  font-family: "Geist";
+  src: url("/fonts/Geist-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/fonts/GeistMono-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+/* Outside the layer: Chromium gives extension pages its own unlayered font
+   rules, which beat anything layered. A page sets its own size with `html body`. */
+body { font: 13px/1.5 "Geist", ui-sans-serif, system-ui, sans-serif; }
+h1, h2, h3, button, input, select, textarea { font-family: "Geist", ui-sans-serif, system-ui, sans-serif; }
+
+/* In a layer: each page's own <style> wins over the theme, whatever order the build gives them. */
+@layer theme {
+:root {
+  color-scheme: dark;
+  --canvas: #05070a;
+  --raised: #0c1017;
+  --muted: #121821;
+  --line: #1d232d;
+  --line-strong: #323a46;
+  --ink: #fafafa;
+  --dim: #a3a3a3;
+  --faint: #8a8a8a;
+  --brand: #2f80ff;
+  --sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --mono: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+  /* The report's font: Geist on the extension's pages only; on a web page it is unset. */
+  --cw-font: var(--sans);
+  --cw-mono: var(--mono);
+}
+
+body {
+  margin: 0;
+  background-color: var(--canvas);
+  /* The faint 40px grid, lines at 2% white. */
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 40px 40px;
+  color: var(--dim);
+}
+
+h1, h2, h3 { color: var(--ink); font-weight: 400; }
+h1 strong, h2 strong { font-weight: 600; }
+a { color: var(--brand); }
+code, .mono { font-family: var(--mono); }
+.note { color: var(--faint); }
+
+/* Primary: white, two cut corners. Secondary: a hairline outline. */
+button {
+  background: var(--ink);
+  color: var(--canvas);
+  border: 0;
+  border-radius: 0;
+  padding: 8px 14px;
+  font: 500 13px/1.2 var(--sans);
+  cursor: pointer;
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+}
+button.secondary,
+button[role="tab"] {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  clip-path: none;
+}
+button:disabled { opacity: 0.55; cursor: default; }
+
+input, textarea, select {
+  background: var(--raised);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  font: inherit;
+}
+
+/* Never remove a focus outline without replacing it; a clip-path hides an
+   outline drawn outside the box, so cut-corner buttons get an inset ring. */
+:where(a, button, input, textarea, select, summary):focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+button:not(.secondary):not([role="tab"]):focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--brand);
+}
+}
