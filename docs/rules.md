@@ -39,7 +39,7 @@ To add or fix a site:
    - `id`: lower-case letters, digits and dashes.
    - `name`: what people call the service.
    - `domains`: where people use and sign up for it, without `www.`; a domain covers its subdomains, and belongs to one site only.
-   - `legalDomains` (optional): other domains its documents live on, such as a parent company's legal site. They do not make the service known there.
+   - `legalDomains` (optional): other domains its documents live on, such as a parent company's legal site. They do not make the service known there. A scan of the service asks for access to all of its `domains` and `legalDomains`, and follows redirects between them.
    - `terms`, `privacy`: the full `https` address of each document, after any redirect, with no tracking query or `#fragment`, on one of `domains` or `legalDomains`. Use the consumer terms people agree to at sign-up, not a business agreement or a data processing addendum, unless that is what sign-up accepts.
    - `signup` (optional): address prefixes of the sign-up pages, on one of its domains, with no query.
 2. Check each address in a private window: it opens without signing in, is the right document, and shows its text without a click (ClauseWatch reads the page as the server sends it, so a page that draws its text only with JavaScript, needs a bot check, or is larger than 2 MB cannot be read; such a site does not belong on the list).

@@ -4,9 +4,8 @@
 // messages from the extension's own pages and scripts, or a right-click.
 
 import { kv } from "../src/storage";
-import { AUTO_ORIGINS, cachedDocs, docsStale, fetchChosen, fetchText, LOCAL_REASON, mayFetch, readKey, rememberIfCurrent } from "../src/auto/background";
+import { AUTO_ORIGINS, cachedDocs, docsStale, fetchChosen, LOCAL_REASON, pageFetch, readKey, rememberIfCurrent } from "../src/auto/background";
 import { readSelection, type DocumentResult } from "../src/engine/documents";
-import { isKnownDocument, knownSite } from "../src/engine/known-sites";
 import { BUNDLED } from "../src/engine/bundled";
 import { compileRules } from "../src/engine/rules";
 import { loadRules } from "../src/engine/rule-set";
@@ -98,7 +97,7 @@ async function finishPendingScanNow(): Promise<Finished> {
   await showResult({ running: true, site: "", documents: [] });
   try {
     // Fetched here, read by the popup: a service worker cannot parse HTML.
-    await showResult(await fetchTargets(pending.url, pending.kind, sites, fetchChosen));
+    await showResult(await fetchTargets(pending.url, pending.kind, sites, (u) => fetchChosen(u, sites)));
   } catch {
     await showResult({ site: siteOf(pending.url), documents: [{ kind: "terms", status: "could_not_read", url: pending.url, reason: "The address could not be read." }] });
   } finally {
@@ -234,15 +233,7 @@ export default defineBackground(() => {
     if (m?.type === "fetch-text" && typeof m.url === "string") {
       const url = m.url;
       const tabUrl = sender.tab?.url;
-      // Only a document on the page's own site, or the page's known site's own documents (and
-      // redirects on their site): never wherever a page asks.
-      return current().then(({ sites }) => {
-        const known = tabUrl && URL.canParse(tabUrl) ? knownSite(sites, new URL(tabUrl).hostname) : null;
-        const listed = isKnownDocument(known, url);
-        // A listed document passes the same refusals as any other: http(s) and no local address.
-        if (!(listed ? mayFetch(url, url) : mayFetch(url, tabUrl))) return { ok: false as const, reason: "Not on this site." };
-        return fetchText(url, (end) => mayFetch(end, tabUrl) || (listed && mayFetch(end, url)));
-      });
+      return current().then(({ sites }) => pageFetch(url, tabUrl, sites));
     }
     const tabSite = sender.tab?.url ? new URL(sender.tab.url).hostname.replace(/^www\./, "") : null;
     // The key says what the documents are read with; a put whose key is no longer current is dropped.

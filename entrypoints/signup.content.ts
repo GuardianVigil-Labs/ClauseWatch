@@ -12,7 +12,9 @@ import { loadRules } from "../src/engine/rule-set";
 import { currentRulesFile } from "../src/engine/rules-update";
 import { kv } from "../src/storage";
 import { discoverLinks, kindsOfPage, KINDS, readDocument, type DocumentResult, type Kind } from "../src/engine/documents";
-import { isSignupPage, knownSite, type KnownSite } from "../src/engine/known-sites";
+import { readFirst } from "../src/ui/scan";
+import type { Fetched } from "../src/auto/background";
+import { inPlaceKinds, isSignupPage, knownSite, type KnownSite } from "../src/engine/known-sites";
 import { findSignupForms, siteOf, type SignupForm } from "../src/auto/detect";
 import { fillReport } from "../src/ui/report";
 import { isMuted, mute, shouldShowCard } from "../src/ui/sites";
@@ -45,19 +47,14 @@ export default defineContentScript({
       if (remembered?.documents) return remembered.documents;
       const rules = await ruleSet();
       const html = document.documentElement.outerHTML;
-      const here = kindsOfPage(html);
+      // On a known site, its listed documents are read, unless this page is one.
+      const here = inPlaceKinds(kindsOfPage(html), known, location.href);
       const out: DocumentResult[] = here.map((k) => readDocument(k, location.href, html, "text/html", rules));
       const found = discoverLinks(html, location.href);
       for (const kind of KINDS.filter((k: Kind) => !here.includes(k))) {
         // A known site's own documents first, then the links on the page.
         const links = [...new Set([...(known ? [known[kind]] : []), ...found[kind]])];
-        let last: DocumentResult = { kind, status: "could_not_read", reason: "No link to this document was found on the page." };
-        for (const url of links.slice(0, MAX_TRIES_PER_KIND)) {
-          const got = await send<{ ok: true; url: string; text: string; contentType: string } | { ok: false; reason: string }>({ type: "fetch-text", url });
-          last = got.ok ? readDocument(kind, got.url, got.text, got.contentType, rules) : { kind, status: "could_not_read", url, reason: got.reason };
-          if (last.status === "read") break;
-        }
-        out.push(last);
+        out.push(await readFirst(kind, links, MAX_TRIES_PER_KIND, rules, (url) => send<Fetched>({ type: "fetch-text", url })));
       }
       // A read that found nothing at all is not kept: next time it is tried again,
       // and the site does not go quiet on the strength of it.

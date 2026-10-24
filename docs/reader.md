@@ -44,7 +44,7 @@ Anyone may implement the same reading (a command-line tool, another browser, a s
 
 - `id`: lower-case letters, digits and dashes, at most 40 characters, unique.
 - `name`: what people call the service, 1 to 80 characters.
-- `domains`: 1 to 10 lower-case public domains where people use and sign up for the service, without `www.`. A domain covers its subdomains, and is listed by one site only. A host belongs to the site with the most specific matching domain. IP addresses and local or internal names are refused.
+- `domains`: 1 to 10 lower-case public domains where people use and sign up for the service, without `www.`. A domain covers its subdomains, and is listed by one site only. A host belongs to the site with the most specific matching domain. IP addresses, local or internal names, and public suffixes or hosting domains shared by unrelated sites (`co.uk`, `github.io`, `vercel.app` and the like, `SHARED_DOMAINS` in `src/engine/known-sites.ts`) are refused.
 - `legalDomains` (optional): up to 10 more domains, checked the same way, where the service's documents live (a parent company's legal site). They never make the service known on those domains.
 - `terms`, `privacy`: the full `https` address of each document, as a browser writes it (`new URL(address).href` gives it back unchanged), with no fragment, port or credentials, on one of `domains` or `legalDomains`.
 - `signup` (optional): up to 10 address prefixes of the service's sign-up pages, `https`, on one of its domains, with no query. A page is a sign-up page when its address without the query, ignoring `www.` on either side, is a prefix, or continues it after a `/`. The path is compared as written, case included.

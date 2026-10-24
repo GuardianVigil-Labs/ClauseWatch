@@ -16,9 +16,9 @@ import { ReportElement } from "../../src/ui/report";
 if (!customElements.get("cw-report")) customElements.define("cw-report", ReportElement);
 import { kv } from "../../src/storage";
 import { AUTO_ORIGINS, fetchChosen } from "../../src/auto/background";
-import { knownSite } from "../../src/engine/known-sites";
+import { inPlaceKinds, knownSite, siteOrigins, type KnownSite } from "../../src/engine/known-sites";
 import {
-  asAddress, isOwnText, MAX_PASTED, readFetched, recordRecent, scanAddress as readAddress, scanOrigins, scanPasted, siteOf,
+  asAddress, isOwnText, readFetched, recordRecent, readFirst, scanAddress as readAddress, scanOrigins, scanPasted, siteOf,
   PENDING_KEY, PENDING_TTL_MS, RECENT_KEY, RESULT_KEY, type RecentSite, type ScanResult,
 } from "../../src/ui/scan";
 import { aiFindings, aiSummary, type AiSettings } from "../../src/ai/assist";
@@ -250,43 +250,27 @@ async function currentPage(): Promise<{ url: string; html: string } | { error: s
   }
 }
 
-async function fetchDocument(kind: Kind, url: string): Promise<DocumentResult> {
-  try {
-    const res = await fetch(url, { credentials: "omit", redirect: "follow" });
-    if (!res.ok) return { kind, status: "could_not_read", url, reason: `The page answered ${res.status}.` };
-    const declared = Number(res.headers.get("content-length"));
-    if (Number.isFinite(declared) && declared > MAX_PAGE_BYTES) return { kind, status: "could_not_read", url, reason: "The page is too large to read." };
-    const text = await res.text();
-    if (text.length > MAX_PAGE_BYTES) return { kind, status: "could_not_read", url, reason: "The page is too large to read." };
-    return readDocument(kind, res.url || url, text, res.headers.get("content-type") ?? "", rules);
-  } catch {
-    return { kind, status: "could_not_read", url, reason: "The page could not be reached, or it moved to a site ClauseWatch was not allowed to read." };
-  }
-}
-
-async function readLinked(site: string, links: Record<Kind, string[]>, kinds: Kind[]): Promise<DocumentResult[]> {
-  const origins = [...new Set(kinds.flatMap((k) => links[k].slice(0, MAX_TRIES_PER_KIND)).map((u) => `${new URL(u).origin}/*`))];
+async function readLinked(site: string, links: Record<Kind, string[]>, kinds: Kind[], known: KnownSite | null): Promise<DocumentResult[]> {
+  // A known site's documents may redirect between its domains: access to each.
+  const origins = [...new Set([...kinds.flatMap((k) => links[k].slice(0, MAX_TRIES_PER_KIND)).map((u) => `${new URL(u).origin}/*`), ...(known ? siteOrigins(known) : [])])];
   // Asked during the user's click, for exactly these origins. A scan still
   // waiting from Scan a link is abandoned, so this grant is never taken for it.
   void browser.storage.session.remove(PENDING_KEY);
+  // Started with the request, inside the click (Firefox), so they see the access held before it.
+  const held = Promise.all(origins.map((o) => browser.permissions.contains({ origins: [o] }).catch(() => false)));
   const granted = await browser.permissions.request({ origins });
+  const before = await held;
   if (!granted) return kinds.map((kind) => ({ kind, status: "could_not_read", reason: `You did not allow ClauseWatch to read ${site}.` }));
   try {
     const out: DocumentResult[] = [];
-    for (const kind of kinds) {
-      let last: DocumentResult = { kind, status: "could_not_read", reason: "No link to this document was found on the page." };
-      for (const url of links[kind].slice(0, MAX_TRIES_PER_KIND)) {
-        last = await fetchDocument(kind, url);
-        if (last.status === "read") break;
-      }
-      out.push(last);
-    }
+    // The same refusals as Scan a link: no local address, no redirect off the site.
+    for (const kind of kinds) out.push(await readFirst(kind, links[kind], MAX_TRIES_PER_KIND, rules, (u) => fetchChosen(u, sites)));
     return out;
   } finally {
-    // Access was for this click only. Never while automatic mode holds access to
-    // every site: that access is not this click's to give back.
-    const automatic = await browser.permissions.contains({ origins: AUTO_ORIGINS }).catch(() => false);
-    if (!automatic) await browser.permissions.remove({ origins }).catch(() => undefined);
+    // Access was for this click only: only what it newly gave is given back, never
+    // access held before (automatic mode's, say).
+    const added = origins.filter((_, i) => !before[i]);
+    if (added.length) await browser.permissions.remove({ origins: added }).catch(() => undefined);
   }
 }
 
@@ -295,11 +279,11 @@ async function run() {
   if ("error" in page) return guide(page.error);
   const site = new URL(page.url).hostname.replace(/^www\./, "");
 
-  const here = kindsOfPage(page.html);
-  const inPlace = here.map((kind) => readDocument(kind, page.url, page.html, "text/html", rules));
-  const found = discoverLinks(page.html, page.url);
   // A known site's own documents (rules/sites.json) first, then the links on the page.
   const known = knownSite(sites, new URL(page.url).hostname);
+  const here = inPlaceKinds(kindsOfPage(page.html), known, page.url);
+  const inPlace = here.map((kind) => readDocument(kind, page.url, page.html, "text/html", rules));
+  const found = discoverLinks(page.html, page.url);
   const links = Object.fromEntries(KINDS.map((k) => [k, [...new Set([...(known ? [known[k]] : []), ...found[k]])]])) as Record<Kind, string[]>;
   const missing = KINDS.filter((k) => !here.includes(k) && links[k].length > 0);
   // A document neither on this page nor linked from it was not read, and the report says so.
@@ -316,7 +300,7 @@ async function run() {
   button.addEventListener("click", async () => {
     button.disabled = true;
     button.textContent = "Reading…";
-    const fetched = await readLinked(site, links, missing);
+    const fetched = await readLinked(site, links, missing, known);
     show(site, [...inPlace, ...fetched, ...unlinked]);
   });
   if (inPlace.length) show(site, [...inPlace, ...unlinked, ...unread(missing, "Not read yet: use the button below.")], button, { final: false });
@@ -467,7 +451,7 @@ async function scanAddress(url: URL, kind: Kind | "auto"): Promise<ScanResult | 
   if (already) {
     // Allowed before (Automatic mode, say): read it here, and leave that access as it was.
     await browser.storage.session.remove(PENDING_KEY);
-    return readAddress(url.href, kind, rules, sites, fetchChosen);
+    return readAddress(url.href, kind, rules, sites, (u) => fetchChosen(u, sites));
   }
   // Newly allowed: the background finishes the scan and gives the access back.
   return (await waitForResult(90_000)) ?? "Still reading. Open ClauseWatch again in a moment to see the result.";
@@ -493,7 +477,6 @@ async function scanForm() {
   const input = document.createElement("textarea");
   input.id = "scan-input";
   input.rows = 4;
-  input.maxLength = MAX_PASTED;
   input.placeholder = "Paste the terms or privacy policy text";
   input.setAttribute("aria-label", "Terms or privacy policy text");
   const kind = document.createElement("select");

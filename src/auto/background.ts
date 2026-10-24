@@ -3,7 +3,7 @@
 // stop it), and remember documents already read per site.
 
 import { sameSite, type DocumentResult } from "../engine/documents";
-import { localHost } from "../engine/known-sites";
+import { isKnownDocument, knownSite, localHost, onSiteDomains, type KnownSite } from "../engine/known-sites";
 
 export { localHost };
 import type { KV } from "../storage";
@@ -26,6 +26,17 @@ export function mayFetch(url: string, tabUrl: string | undefined): boolean {
   return /^https?:$/.test(u.protocol) && /^https?:$/.test(t.protocol) && !localHost(u.hostname) && sameSite(u.hostname, t.hostname);
 }
 
+/**
+ * Whether a redirect from `start` to `end` stays within one known site: both
+ * on that site's own domains or legal domains, and `end` a public web address.
+ */
+export function withinKnownSite(end: string, start: string, sites: KnownSite[]): boolean {
+  if (!mayFetch(end, end) || !URL.canParse(start)) return false;
+  const from = new URL(start).hostname;
+  const to = new URL(end).hostname;
+  return sites.some((s) => onSiteDomains(s, from) && onSiteDomains(s, to));
+}
+
 export type Fetched = { ok: true; url: string; text: string; contentType: string } | { ok: false; reason: string };
 
 export async function fetchText(url: string, staysOn?: (finalUrl: string) => boolean): Promise<Fetched> {
@@ -35,10 +46,10 @@ export async function fetchText(url: string, staysOn?: (finalUrl: string) => boo
   } catch (err) {
     console.debug("[ClauseWatch] document unreachable", err instanceof Error ? err.name : "");
   }
-  if (!res) return { ok: false, reason: "The page could not be reached." };
+  if (!res) return { ok: false, reason: (await redirected(url)) ? BLOCKED_REASON : "The page could not be reached." };
   if (!res.ok) return { ok: false, reason: `The page answered ${res.status}.` };
   // Redirects are followed, but a read that ended somewhere else is not used.
-  if (staysOn && res.url && !staysOn(res.url)) return { ok: false, reason: "The link led to another site." };
+  if (staysOn && res.url && !staysOn(res.url)) return { ok: false, reason: OFF_SITE_REASON };
   const declared = Number(res.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > MAX_BYTES) return { ok: false, reason: "The page is too large to read." };
   const text = await res.text();
@@ -46,16 +57,44 @@ export async function fetchText(url: string, staysOn?: (finalUrl: string) => boo
   return { ok: true, url: res.url || url, text, contentType: res.headers.get("content-type") ?? "" };
 }
 
+export const OFF_SITE_REASON = "The page redirected to another site, which ClauseWatch does not read for it.";
+export const BLOCKED_REASON = "The page redirected to a site ClauseWatch was not allowed to read.";
+
+/** Whether a failed read was a redirect the browser would not follow: asked again without following it. */
+async function redirected(url: string): Promise<boolean> {
+  try {
+    const res = await fetch(url, { credentials: "omit", redirect: "manual" });
+    return res.type === "opaqueredirect" || (res.status >= 300 && res.status < 400);
+  } catch {
+    return false;
+  }
+}
+
 export const LOCAL_REASON = "ClauseWatch does not read local or private network addresses.";
 
 /**
  * Fetches an address the person chose (Scan a link, the link menu, a known
  * site's documents): never a local or private address, and a redirect that
- * ends on another site is not used.
+ * ends on another site is not used. Redirects between a known site's own
+ * domains and legal domains are followed.
  */
-export function fetchChosen(url: string): Promise<Fetched> {
+export function fetchChosen(url: string, sites: KnownSite[] = []): Promise<Fetched> {
   if (!mayFetch(url, url)) return Promise.resolve({ ok: false, reason: LOCAL_REASON });
-  return fetchText(url, (end) => mayFetch(end, url));
+  return fetchText(url, (end) => mayFetch(end, url) || withinKnownSite(end, url, sites));
+}
+
+/**
+ * A fetch automatic mode's script asks for, from the page at `tabUrl`: only a
+ * document on the page's own site, or its known site's listed documents, and
+ * redirects on their site or between that known site's domains. Never
+ * wherever a page asks.
+ */
+export function pageFetch(url: string, tabUrl: string | undefined, sites: KnownSite[]): Promise<Fetched> {
+  const known = tabUrl && URL.canParse(tabUrl) ? knownSite(sites, new URL(tabUrl).hostname) : null;
+  const listed = isKnownDocument(known, url);
+  // A listed document passes the same refusals as any other: http(s) and no local address.
+  if (!(listed ? mayFetch(url, url) : mayFetch(url, tabUrl))) return Promise.resolve({ ok: false, reason: "Not on this site." });
+  return fetchText(url, (end) => mayFetch(end, tabUrl) || (listed && mayFetch(end, url)) || (!!known && withinKnownSite(end, url, [known])));
 }
 
 /** What the remembered documents were read with: the extension version, the person's rules and the signed rules release. */

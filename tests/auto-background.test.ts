@@ -87,12 +87,12 @@ describe("document cache", () => {
 
 describe("fetchText off-site redirects", () => {
   it("discards a read that ended on another site", async () => {
-    const { fetchText, mayFetch } = await import("../src/auto/background");
+    const { fetchText, mayFetch, OFF_SITE_REASON } = await import("../src/auto/background");
     const res = new Response("<html>terms</html>", { status: 200, headers: { "content-type": "text/html" } });
     Object.defineProperty(res, "url", { value: "http://192.0.2.10/admin" });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(res));
     const got = await fetchText("https://service.example/terms", (end) => mayFetch(end, "https://app.service.example/signup"));
-    expect(got).toEqual({ ok: false, reason: "The link led to another site." });
+    expect(got).toEqual({ ok: false, reason: OFF_SITE_REASON });
     vi.unstubAllGlobals();
   });
 });
@@ -126,16 +126,16 @@ describe("fetchText, every refusal and the limits", () => {
     vi.unstubAllGlobals();
   });
   it("reads a chosen address only off the local network, and only if it stays on its site", async () => {
-    const { fetchChosen, LOCAL_REASON } = await import("../src/auto/background");
+    const { fetchChosen, LOCAL_REASON, OFF_SITE_REASON } = await import("../src/auto/background");
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     expect(await fetchChosen("http://198.51.100.10/terms")).toEqual({ ok: false, reason: LOCAL_REASON });
     expect(await fetchChosen("http://localhost:8080/terms")).toEqual({ ok: false, reason: LOCAL_REASON });
     expect(fetchMock).not.toHaveBeenCalled();
     respond("terms", {}, "https://other.example/terms");
-    expect(await fetchChosen("https://service.example/terms")).toEqual({ ok: false, reason: "The link led to another site." });
+    expect(await fetchChosen("https://service.example/terms")).toEqual({ ok: false, reason: OFF_SITE_REASON });
     respond("terms", {}, "http://203.0.113.1/terms");
-    expect(await fetchChosen("https://service.example/terms")).toEqual({ ok: false, reason: "The link led to another site." });
+    expect(await fetchChosen("https://service.example/terms")).toEqual({ ok: false, reason: OFF_SITE_REASON });
     respond("terms", {}, "https://legal.service.example/terms");
     expect(await fetchChosen("https://service.example/terms")).toMatchObject({ ok: true, url: "https://legal.service.example/terms" });
     vi.unstubAllGlobals();
@@ -146,5 +146,109 @@ describe("fetchText, every refusal and the limits", () => {
     expect(localHost("[2001:db8::1]")).toBe(true);
     expect(localHost("203.0.113.7")).toBe(true);
     expect(localHost("service.example")).toBe(false);
+  });
+});
+
+describe("redirects within a known site", () => {
+  const sites = [{ id: "service", name: "Service", domains: ["service.example", "service-app.example"], legalDomains: ["parent.example"], terms: "https://www.service.example/terms", privacy: "https://parent.example/privacy" }];
+  const respond = (url: string) => {
+    const res = new Response("terms", { status: 200, headers: { "content-type": "text/html" } });
+    Object.defineProperty(res, "url", { value: url });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(res));
+  };
+
+  it("allows hops between its own domains and legal domains, never elsewhere", async () => {
+    const { withinKnownSite } = await import("../src/auto/background");
+    expect(withinKnownSite("https://service-app.example/sync?next=1", "https://www.service.example/terms", sites)).toBe(true);
+    expect(withinKnownSite("https://www.parent.example/privacy", "https://service.example/privacy", sites)).toBe(true);
+    expect(withinKnownSite("https://other.example/terms", "https://www.service.example/terms", sites)).toBe(false);
+    expect(withinKnownSite("https://service-app.example/", "https://other.example/terms", sites)).toBe(false);
+    expect(withinKnownSite("http://192.0.2.10/terms", "https://www.service.example/terms", sites)).toBe(false);
+    expect(withinKnownSite("https://intranet.service.local/", "https://www.service.example/terms", sites)).toBe(false);
+    expect(withinKnownSite("file:///etc/passwd", "https://www.service.example/terms", sites)).toBe(false);
+    expect(withinKnownSite("https://service-app.example/", "not a url", sites)).toBe(false);
+    expect(withinKnownSite("https://service-app.example/", "https://www.service.example/terms", [])).toBe(false);
+    // From one known site's domain to another known site's: refused.
+    const two = [...sites, { id: "other", name: "Other", domains: ["other-service.example"], terms: "https://other-service.example/terms", privacy: "https://other-service.example/privacy" }];
+    expect(withinKnownSite("https://other-service.example/terms", "https://www.service.example/terms", two)).toBe(false);
+    expect(withinKnownSite("https://www.service.example/terms", "https://other-service.example/terms", two)).toBe(false);
+  });
+
+  it("follows such a redirect for a chosen address, and refuses one off the site", async () => {
+    const { fetchChosen, OFF_SITE_REASON } = await import("../src/auto/background");
+    respond("https://www.service.example/terms");
+    expect(await fetchChosen("https://www.service.example/terms", sites)).toMatchObject({ ok: true });
+    respond("https://service-app.example/terms");
+    expect(await fetchChosen("https://www.service.example/terms", sites)).toMatchObject({ ok: true, url: "https://service-app.example/terms" });
+    // Without the known sites, the same hop is another site.
+    expect(await fetchChosen("https://www.service.example/terms")).toEqual({ ok: false, reason: OFF_SITE_REASON });
+    respond("https://other.example/terms");
+    expect(await fetchChosen("https://www.service.example/terms", sites)).toEqual({ ok: false, reason: OFF_SITE_REASON });
+    vi.unstubAllGlobals();
+  });
+
+  it("says a redirect was blocked when the browser would not follow it", async () => {
+    const { fetchText, BLOCKED_REASON } = await import("../src/auto/background");
+    const fetchMock = vi.fn().mockRejectedValueOnce(new TypeError("NetworkError")).mockResolvedValueOnce({ type: "opaqueredirect", status: 0 });
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await fetchText("https://www.service.example/terms")).toEqual({ ok: false, reason: BLOCKED_REASON });
+    expect(fetchMock).toHaveBeenLastCalledWith("https://www.service.example/terms", { credentials: "omit", redirect: "manual" });
+    for (const status of [300, 302, 399]) {
+      vi.stubGlobal("fetch", vi.fn().mockRejectedValueOnce(new TypeError("NetworkError")).mockResolvedValueOnce({ type: "basic", status }));
+      expect(await fetchText("https://www.service.example/terms")).toEqual({ ok: false, reason: BLOCKED_REASON });
+    }
+    for (const status of [200, 299, 400]) {
+      vi.stubGlobal("fetch", vi.fn().mockRejectedValueOnce(new TypeError("NetworkError")).mockResolvedValueOnce({ type: "basic", status }));
+      expect(await fetchText("https://www.service.example/terms")).toEqual({ ok: false, reason: "The page could not be reached." });
+    }
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("automatic mode's fetches for a page (pageFetch)", () => {
+  const sites = [{ id: "service", name: "Service", domains: ["service.example", "service-app.example"], legalDomains: ["parent.example"], terms: "https://www.service.example/terms", privacy: "https://www.parent.example/privacy" }];
+  const respond = (url: string) => {
+    const res = new Response("<html>doc</html>", { status: 200, headers: { "content-type": "text/html" } });
+    Object.defineProperty(res, "url", { value: url });
+    const f = vi.fn().mockResolvedValue(res);
+    vi.stubGlobal("fetch", f);
+    return f;
+  };
+
+  it("fetches the page's own site and its known site's listed documents, nothing else", async () => {
+    const { pageFetch } = await import("../src/auto/background");
+    const tab = "https://app.service.example/signup";
+    respond("https://www.service.example/legal/terms");
+    expect(await pageFetch("https://www.service.example/legal/terms", tab, sites)).toMatchObject({ ok: true });
+    // The listed privacy statement, on the parent's legal domain, with a redirect within it.
+    respond("https://legal.parent.example/privacy");
+    expect(await pageFetch("https://www.parent.example/privacy", tab, sites)).toMatchObject({ ok: true, url: "https://legal.parent.example/privacy" });
+    // A redirect between the known site's own domains.
+    respond("https://service-app.example/terms");
+    expect(await pageFetch("https://www.service.example/terms", tab, sites)).toMatchObject({ ok: true });
+    // Another address on the legal domain is not listed: refused before any fetch.
+    const f = respond("https://www.parent.example/other");
+    expect(await pageFetch("https://www.parent.example/other", tab, sites)).toEqual({ ok: false, reason: "Not on this site." });
+    expect(await pageFetch("https://elsewhere.example/terms", tab, sites)).toEqual({ ok: false, reason: "Not on this site." });
+    expect(await pageFetch("http://192.0.2.1/terms", tab, sites)).toEqual({ ok: false, reason: "Not on this site." });
+    expect(await pageFetch("https://www.service.example/terms", undefined, sites)).toEqual({ ok: false, reason: "Not on this site." });
+    expect(await pageFetch("https://www.service.example/terms", "not a url", sites)).toEqual({ ok: false, reason: "Not on this site." });
+    expect(f).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("refuses a read that redirected off the site or to a private address", async () => {
+    const { pageFetch, OFF_SITE_REASON } = await import("../src/auto/background");
+    const tab = "https://app.service.example/signup";
+    respond("http://192.0.2.10/admin");
+    expect(await pageFetch("https://www.parent.example/privacy", tab, sites)).toEqual({ ok: false, reason: OFF_SITE_REASON });
+    respond("https://elsewhere.example/terms");
+    expect(await pageFetch("https://www.service.example/terms", tab, sites)).toEqual({ ok: false, reason: OFF_SITE_REASON });
+    // On an unknown site, only its own site.
+    respond("https://other.example/terms");
+    expect(await pageFetch("https://unknown.example/terms", "https://unknown.example/signup", sites)).toEqual({ ok: false, reason: OFF_SITE_REASON });
+    respond("https://legal.unknown.example/terms");
+    expect(await pageFetch("https://unknown.example/terms", "https://unknown.example/signup", sites)).toMatchObject({ ok: true });
+    vi.unstubAllGlobals();
   });
 });

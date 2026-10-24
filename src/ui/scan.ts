@@ -3,7 +3,7 @@
 // Everything here runs on the device; nothing is sent anywhere.
 
 import { KINDS, kindsOfPage, readDocument, type DocumentResult, type Kind } from "../engine/documents";
-import { isKnownDocument, knownSite, localHost, type KnownSite } from "../engine/known-sites";
+import { isKnownDocument, knownSite, localHost, siteOrigins, type KnownSite } from "../engine/known-sites";
 import type { CompiledRules } from "../engine/rules";
 import type { Fetched } from "../auto/background";
 
@@ -82,8 +82,11 @@ export function scanTargets(url: string, kind: Kind | "auto", sites: KnownSite[]
   return KINDS.filter((k) => kind === "auto" || k === kind).map((k) => ({ url: known[k], kind: k }));
 }
 
-/** The sites a scan needs access to, as permission patterns. */
-export const scanOrigins = (url: string, kind: Kind | "auto", sites: KnownSite[]) => [...new Set(scanTargets(url, kind, sites).map((t) => `${new URL(t.url).origin}/*`))];
+/** The sites a scan needs access to, as permission patterns: on a known site, all of its domains, for the redirects between them. */
+export function scanOrigins(url: string, kind: Kind | "auto", sites: KnownSite[]): string[] {
+  const known = knownSite(sites, new URL(url).hostname);
+  return [...new Set([...scanTargets(url, kind, sites).map((t) => `${new URL(t.url).origin}/*`), ...(known ? siteOrigins(known) : [])])];
+}
 
 /** Scans an address, reading a known site's own documents (scanTargets). */
 export async function scanAddress(url: string, kind: Kind | "auto", rules: CompiledRules, sites: KnownSite[], fetchText: (u: string) => Promise<Fetched>): Promise<ScanResult> {
@@ -183,11 +186,25 @@ export async function recordRecent(list: RecentSite[], site: string, documents: 
   return [entry, ...list.filter((r) => r.site !== site)].slice(0, MAX_RECENT);
 }
 
+/**
+ * The first of `urls` (at most `tries` of them) that reads as a `kind`
+ * document, or why the last one tried could not be read.
+ */
+export async function readFirst(kind: Kind, urls: string[], tries: number, rules: CompiledRules, fetchText: (u: string) => Promise<Fetched>): Promise<DocumentResult> {
+  let last: DocumentResult = { kind, status: "could_not_read", reason: "No link to this document was found on the page." };
+  for (const url of urls.slice(0, tries)) {
+    const got = await fetchText(url);
+    last = got.ok ? readDocument(kind, got.url, got.text, got.contentType, rules) : { kind, status: "could_not_read", url, reason: got.reason };
+    if (last.status === "read") break;
+  }
+  return last;
+}
+
 /** A saved pending scan, if still fresh and well formed. */
 export function freshPending(value: unknown, now = Date.now()): PendingScan | null {
   const p = value as PendingScan | undefined;
   if (!p || typeof p.url !== "string" || !asAddress(p.url) || typeof p.at !== "number") return null;
   if (!["terms", "privacy", "auto"].includes(p.kind)) return null;
-  if (p.origins !== undefined && !(Array.isArray(p.origins) && p.origins.every((o) => typeof o === "string" && /^https?:\/\/[^/*]+\/\*$/.test(o)))) return null;
+  if (p.origins !== undefined && !(Array.isArray(p.origins) && p.origins.every((o) => typeof o === "string" && /^https?:\/\/(\*\.)?[^/*]+\/\*$/.test(o)))) return null;
   return now - p.at <= PENDING_TTL_MS ? p : null;
 }

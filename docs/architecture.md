@@ -14,8 +14,8 @@ How the extension is built. ClauseWatch is a Manifest V3 extension written in Ty
 
 ## Reading a document (`src/engine/`)
 
-1. **Finding documents** (`documents.ts`): on a known site, the addresses from `rules/sites.json` (`known-sites.ts`); otherwise the page's links whose labels or addresses name terms or a privacy policy, on the page's own site.
-2. **Fetching**: with the site access the user just granted, without cookies, at most 2 MB, never from a local or private network address, and never following a redirect to another site (`src/auto/background.ts`).
+1. **Finding documents** (`documents.ts`): on a known site, the addresses from `rules/sites.json` (`known-sites.ts`), and a page is read in place only when it is one of them; otherwise the page's links whose labels or addresses name terms or a privacy policy, on the page's own site.
+2. **Fetching**: with the site access the user just granted, without cookies, at most 2 MB, never from a local or private network address, and never following a redirect to another site, except between a known site's own domains and legal domains (`src/auto/background.ts`).
 3. **Text** (`document.ts`): the HTML is parsed as the browser parses it (scripting off), skipping scripts, forms, dialogs and cookie or consent banners, and split into blocks and sentences.
 4. **Recognising the document**: at least 300 words and a title such as "Terms of Service" or "Privacy Policy". Anything else is reported as not that document.
 5. **Matching** (`rules.ts`): a rule matches a sentence when all of its `all` patterns match and none of its `none` patterns do. The first match per rule per clause becomes a finding, quoted exactly with its position. Each topic is then `found` or `not_found`, and a document that could not be read says why.

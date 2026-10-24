@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import rulesFile from "../rules/rules.json";
 import { compileRules, type RulesFile } from "../src/engine/rules";
-import { asAddress, fetchTargets, foundCount, freshPending, isOwnText, MAX_PASTED, readFetched, recordRecent, scanAddress, scanOrigins, scanPasted, scanTargets, scanText, scanUrl, PENDING_TTL_MS } from "../src/ui/scan";
+import { asAddress, fetchTargets, foundCount, freshPending, isOwnText, MAX_PASTED, readFetched, readFirst, recordRecent, scanAddress, scanOrigins, scanPasted, scanTargets, scanText, scanUrl, PENDING_TTL_MS } from "../src/ui/scan";
 import type { KnownSite } from "../src/engine/known-sites";
 import type { DocumentResult } from "../src/engine/documents";
 
@@ -51,6 +51,11 @@ describe("Scan a link", () => {
     expect(scanPasted(long, "terms", rules).site).toBe("Pasted text (its first 200,000 characters)");
     expect(scanPasted(long.slice(0, MAX_PASTED), "terms", rules).site).toBe("Pasted text");
     expect(scanPasted(long, "auto", rules).documents[0]!.status).toBe("read");
+    // A paste of megabytes keeps its start, and says it was cut.
+    const huge = scanPasted(`${terms} ${"y ".repeat(1_000_000)}`, "terms", rules);
+    expect(huge.site).toBe("Pasted text (its first 200,000 characters)");
+    expect(huge.documents[0]).toMatchObject({ status: "read" });
+    expect((huge.documents[0] as { body: string }).body.startsWith("Terms of Service.")).toBe(true);
     expect(isOwnText("Pasted text (its first 200,000 characters)")).toBe(true);
     expect(isOwnText("Selected text on service.example")).toBe(true);
     expect(isOwnText("service.example")).toBe(false);
@@ -73,7 +78,13 @@ describe("Scan a link", () => {
     // One of its documents, or another site: the address itself.
     expect(scanTargets("https://legal.service.example/terms", "auto", known)).toEqual([{ url: "https://legal.service.example/terms", kind: "auto" }]);
     expect(scanTargets("https://else.example/terms", "auto", known)).toEqual([{ url: "https://else.example/terms", kind: "auto" }]);
-    expect(scanOrigins("https://service.example/", "auto", known)).toEqual(["https://legal.service.example/*", "https://policies.other.example/*"]);
+    // Every domain of the known site too, for redirects between them.
+    expect(scanOrigins("https://service.example/", "auto", known)).toEqual(["https://legal.service.example/*", "https://policies.other.example/*", "https://service.example/*", "https://*.service.example/*"]);
+    expect(scanOrigins("https://legal.service.example/terms", "auto", [{ ...known[0]!, legalDomains: ["other.example"] }])).toEqual([
+      "https://legal.service.example/*", "https://service.example/*", "https://*.service.example/*", "https://other.example/*", "https://*.other.example/*",
+    ]);
+    // Anywhere else: only the address's own site.
+    expect(scanOrigins("https://else.example/terms", "auto", known)).toEqual(["https://else.example/*"]);
     const seen: string[] = [];
     const r = await scanAddress("https://service.example/", "auto", rules, known, async (u) => {
       seen.push(u);
@@ -111,6 +122,9 @@ describe("Scan a link", () => {
     // The sites it asked for travel with it, and only as permission patterns.
     expect(freshPending({ url: "https://service.example/t", kind: "auto", at: now, origins: ["https://legal.service.example/*"] }, now)?.origins).toEqual(["https://legal.service.example/*"]);
     expect(freshPending({ url: "https://service.example/t", kind: "auto", at: now, origins: ["<all_urls>"] }, now)).toBeNull();
+    expect(freshPending({ url: "https://service.example/t", kind: "auto", at: now, origins: ["https://*.service.example/*"] }, now)?.origins).toEqual(["https://*.service.example/*"]);
+    expect(freshPending({ url: "https://service.example/t", kind: "auto", at: now, origins: ["https://*/*"] }, now)).toBeNull();
+    expect(freshPending({ url: "https://service.example/t", kind: "auto", at: now, origins: ["https://a.*.example/*"] }, now)).toBeNull();
     expect(freshPending({ url: "https://service.example/t", kind: "auto", at: now, origins: "https://a.example/*" }, now)).toBeNull();
   });
 });
@@ -173,5 +187,37 @@ describe("found count for the site card and recent list", () => {
     expect(foundCount([doc("terms", [], ["data_sale"])])).toBe(0);
     const list = await recordRecent([], "service.example", [doc("terms", ["ai_training"])]);
     expect(list[0]!.found).toBe(1);
+  });
+});
+
+describe("reading the first link that is the document (readFirst)", () => {
+  it("tries links in order, at most the limit, and says why the last one failed", async () => {
+    const seen: string[] = [];
+    const fetcher = async (u: string) => {
+      seen.push(u);
+      if (u.includes("down")) return { ok: false as const, reason: "The page redirected to another site, which ClauseWatch does not read for it." };
+      return { ok: true as const, url: u, text: page(u.includes("privacy") ? "Privacy Policy" : "About us, a page about nothing in particular"), contentType: "text/html" };
+    };
+    const read = await readFirst("privacy", ["https://s.example/down", "https://s.example/privacy", "https://s.example/privacy-2"], 3, rules, fetcher);
+    expect(read).toMatchObject({ kind: "privacy", status: "read", url: "https://s.example/privacy" });
+    expect(seen).toEqual(["https://s.example/down", "https://s.example/privacy"]);
+    seen.length = 0;
+    const failed = await readFirst("privacy", ["https://s.example/about", "https://s.example/down", "https://s.example/privacy"], 2, rules, fetcher);
+    expect(seen).toEqual(["https://s.example/about", "https://s.example/down"]);
+    expect(failed).toEqual({ kind: "privacy", status: "could_not_read", url: "https://s.example/down", reason: "The page redirected to another site, which ClauseWatch does not read for it." });
+    expect(await readFirst("terms", [], 3, rules, fetcher)).toEqual({ kind: "terms", status: "could_not_read", reason: "No link to this document was found on the page." });
+  });
+
+  it("with fetchChosen, never reads a document that redirected off the site or to a private address", async () => {
+    const { fetchChosen, OFF_SITE_REASON } = await import("../src/auto/background");
+    const { vi } = await import("vitest");
+    const sites: KnownSite[] = [{ id: "service", name: "Service", domains: ["service.example"], legalDomains: ["parent.example"], terms: "https://service.example/terms", privacy: "https://service.example/privacy" }];
+    for (const end of ["http://192.0.2.10/admin", "https://unrelated.example/privacy"]) {
+      const res = new Response(page("Privacy Policy"), { status: 200, headers: { "content-type": "text/html" } });
+      Object.defineProperty(res, "url", { value: end });
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(res));
+      expect(await readFirst("privacy", ["https://service.example/privacy"], 3, rules, (u) => fetchChosen(u, sites))).toMatchObject({ status: "could_not_read", reason: OFF_SITE_REASON });
+    }
+    vi.unstubAllGlobals();
   });
 });

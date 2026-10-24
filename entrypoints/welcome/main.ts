@@ -3,7 +3,7 @@
 // Settings. Every choice says plainly what leaves the device.
 
 import { kv } from "../../src/storage";
-import { builtInModel, type AiSettings } from "../../src/ai/assist";
+import { builtInModel, MODEL_OPTIONS, type AiSettings } from "../../src/ai/assist";
 import { AUTO_ORIGINS } from "../../src/auto/background";
 
 const aiBox = document.getElementById("ai")!;
@@ -47,7 +47,7 @@ async function aiChoices() {
   const lm = builtInModel();
   if (lm) {
     const builtin = choice("ai", "builtin", "The browser's built-in AI", "The model runs on this computer.", current.mode === "builtin", { leaves: { what: "nothing", text: "" } });
-    const availability = lm.availability ? await lm.availability().catch(() => "unavailable") : "available";
+    const availability = lm.availability ? await lm.availability(MODEL_OPTIONS).catch(() => "unavailable") : "available";
     if (availability === "unavailable") {
       builtin.input.disabled = true;
       builtin.label.append(Object.assign(document.createElement("span"), { className: "warn", textContent: " Not available on this device." }));

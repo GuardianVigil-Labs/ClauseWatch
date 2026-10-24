@@ -71,7 +71,7 @@ On a site's report, ClauseWatch can draft a request to the service to erase your
 ## Known limits
 
 - ClauseWatch reads what the page and its linked documents say in text. A PDF, an image of the terms, or a page that shows its text only after you sign in cannot be read; the report says so.
-- ClauseWatch never reads a local or private network address (`localhost`, IP addresses, `.local`, `.internal` and the like), and a link that redirects to another site is not used.
+- ClauseWatch never reads a local or private network address (`localhost`, IP addresses, `.local`, `.internal` and the like), and a link that redirects to another site is not used. A known service's redirects between its own domains are followed, so a scan of one asks for access to all of them.
 - Text in a cookie or consent banner, or in a dialog over the page, is not part of the document and is never quoted.
 - Some services block any request that does not come from a full browser visit (a bot check), or are too large to read (more than 2 MB). Those documents show **Could not read**, with the reason; open them in a tab and use **check selected text** instead.
 - **Firefox:** Firefox loads every address an extension asks for over https, so a terms page available only over plain http cannot be read there. Firefox also cannot give an extension access to an address with a port number (`https://service.example:8443/terms`), so Scan a link cannot read one. Both work in Chrome, Edge and Opera.

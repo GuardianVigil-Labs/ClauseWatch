@@ -49,9 +49,12 @@ export function buildPrompt(doc: DocumentResult & { status: "read" }, categories
   ].join("\n");
 }
 
+/** What the built-in model is asked for: English text, the language of the prompts and the report. */
+export const MODEL_OPTIONS = { expectedInputs: [{ type: "text", languages: ["en"] }], expectedOutputs: [{ type: "text", languages: ["en"] }] };
+
 interface BuiltInModel {
-  availability?: () => Promise<string>;
-  create: () => Promise<{ prompt: (p: string) => Promise<string>; destroy?: () => void }>;
+  availability?: (options?: typeof MODEL_OPTIONS) => Promise<string>;
+  create: (options?: typeof MODEL_OPTIONS) => Promise<{ prompt: (p: string) => Promise<string>; destroy?: () => void }>;
 }
 
 /** The browser's on-device model, when it has one. */
@@ -64,8 +67,8 @@ async function ask(settings: AiSettings, prompt: string): Promise<string> {
   if (settings.mode === "builtin") {
     const lm = builtInModel();
     if (!lm) throw new Error("This browser has no built-in model.");
-    if (lm.availability && (await lm.availability()) === "unavailable") throw new Error("The built-in model is not available on this device.");
-    const session = await lm.create();
+    if (lm.availability && (await lm.availability(MODEL_OPTIONS)) === "unavailable") throw new Error("The built-in model is not available on this device.");
+    const session = await lm.create(MODEL_OPTIONS);
     try {
       return await session.prompt(prompt);
     } finally {

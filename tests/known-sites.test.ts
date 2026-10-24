@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import sitesFile from "../rules/sites.json";
 import rulesFile from "../rules/rules.json";
-import { isKnownDocument, isSignupPage, knownSite, sitesProblem, MAX_SITES, type KnownSite } from "../src/engine/known-sites";
+import { inPlaceKinds, isKnownDocument, isSignupPage, knownSite, onSiteDomains, sameDocument, SHARED_DOMAINS, siteOrigins, sitesProblem, MAX_SITES, type KnownSite } from "../src/engine/known-sites";
 import { readSelection } from "../src/engine/documents";
 import { compileRules, type RulesFile } from "../src/engine/rules";
 import { BUNDLED } from "../src/engine/bundled";
@@ -155,5 +155,58 @@ describe("readSelection (the right-click menu)", () => {
     const words = Array.from({ length: rules.minQuoteWords }, (_, i) => `word${i}`).join(" ");
     expect(readSelection(words, "", rules).status).toBe("read");
     expect(readSelection(words.split(" ").slice(1).join(" "), "", rules).status).toBe("could_not_read");
+  });
+});
+
+describe("a known site's listed documents", () => {
+  const s = site({ domains: ["service.example", "service-app.example"], legalDomains: ["parent.example"], privacy: "https://www.parent.example/privacy/statement/" });
+
+  it("matches its document address ignoring the fragment, a trailing slash and www.", () => {
+    expect(sameDocument("https://www.parent.example/privacy/statement/", "https://parent.example/privacy/statement#cookies")).toBe(true);
+    expect(sameDocument("https://parent.example/privacy", "https://parent.example/privacy/")).toBe(true);
+    expect(sameDocument("https://parent.example/privacy", "https://parent.example/privacy/other")).toBe(false);
+    // A query on the same page, a tracking tag say, is the same document.
+    expect(sameDocument("https://parent.example/privacy", "https://parent.example/privacy?lang=fr")).toBe(true);
+    expect(sameDocument("https://parent.example/privacy", "http://parent.example/privacy")).toBe(false);
+    expect(sameDocument("https://parent.example/privacy", "https://legal.parent.example/privacy")).toBe(false);
+    expect(sameDocument("not a url", "https://parent.example/privacy")).toBe(false);
+    expect(sameDocument("https://parent.example/privacy", "not a url")).toBe(false);
+    expect(isKnownDocument(s, "https://parent.example/privacy/statement")).toBe(true);
+    expect(isKnownDocument(s, "https://legal.service.example/terms/#top")).toBe(true);
+  });
+
+  it("reads a known site's page in place only when it is that listed document", () => {
+    // A sign-up page that mentions the privacy statement is not read as it.
+    expect(inPlaceKinds(["privacy"], s, "https://login.service.example/signup/")).toEqual([]);
+    expect(inPlaceKinds(["terms", "privacy"], s, "https://legal.service.example/terms#section-2")).toEqual(["terms"]);
+    expect(inPlaceKinds(["terms", "privacy"], s, "https://parent.example/privacy/statement")).toEqual(["privacy"]);
+    expect(inPlaceKinds(["terms"], s, "https://legal.service.example/terms?utm_source=mail")).toEqual(["terms"]);
+    // An unknown site: what the page says it is.
+    expect(inPlaceKinds(["terms", "privacy"], null, "https://else.example/signup")).toEqual(["terms", "privacy"]);
+  });
+
+  it("asks for, and follows redirects across, all of its domains and legal domains only", () => {
+    expect(siteOrigins(s)).toEqual([
+      "https://service.example/*", "https://*.service.example/*",
+      "https://service-app.example/*", "https://*.service-app.example/*",
+      "https://parent.example/*", "https://*.parent.example/*",
+    ]);
+    expect(siteOrigins(site({ domains: ["service.example"] }))).toEqual(["https://service.example/*", "https://*.service.example/*"]);
+    expect(onSiteDomains(s, "WWW.Service-App.example.")).toBe(true);
+    expect(onSiteDomains(s, "parent.example")).toBe(true);
+    expect(onSiteDomains(s, "notparent.example")).toBe(false);
+    expect(onSiteDomains(s, "parent.example.evil.example")).toBe(false);
+  });
+});
+
+describe("shared domains", () => {
+  it("refuses a public suffix or shared host as a domain or legal domain", () => {
+    for (const d of ["co.uk", "com.au", "co.jp", "github.io", "pages.dev", "vercel.app", "netlify.app", "notion.site", "herokuapp.com", "blogspot.com", "appspot.com", "web.app", "firebaseapp.com", "azurewebsites.net", "cloudfront.net", "s3.amazonaws.com"]) {
+      expect(SHARED_DOMAINS.has(d)).toBe(true);
+      expect(sitesProblem([site({ domains: [d], terms: `https://${d}/terms`, privacy: `https://${d}/privacy` })])).toMatch(/is not a lower-case public domain/);
+      expect(sitesProblem([site({ legalDomains: [d] })])).toMatch(/is not a lower-case public domain/);
+    }
+    // A service's own name under one of them is its own.
+    expect(sitesProblem([site({ domains: ["service.github.io"], terms: "https://service.github.io/terms", privacy: "https://service.github.io/privacy", signup: undefined })])).toBeNull();
   });
 });

@@ -42,8 +42,20 @@ export function localHost(hostname: string): boolean {
   );
 }
 
-/** A lower-case public domain without "www.": what "domains" and "legalDomains" list. */
-const isDomain = (d: unknown): d is string => typeof d === "string" && d.length <= 253 && DOMAIN.test(d) && !d.startsWith("www.") && !localHost(d) && !/\.\d+$/.test(d);
+/**
+ * Public suffixes and hosting domains shared by many unrelated sites: never a
+ * known site's domain, which would make all of them one site.
+ * Known limit: a short list, not the full public suffix list.
+ */
+export const SHARED_DOMAINS = new Set([
+  "co.uk", "org.uk", "com.au", "net.au", "co.jp", "co.nz", "co.in", "com.br", "com.cn", "co.za",
+  "github.io", "gitlab.io", "pages.dev", "workers.dev", "vercel.app", "netlify.app", "notion.site", "herokuapp.com",
+  "blogspot.com", "appspot.com", "web.app", "firebaseapp.com", "azurewebsites.net", "cloudfront.net", "s3.amazonaws.com",
+]);
+
+/** A lower-case public domain without "www.", not one shared by unrelated sites: what "domains" and "legalDomains" list. */
+const isDomain = (d: unknown): d is string =>
+  typeof d === "string" && d.length <= 253 && DOMAIN.test(d) && !d.startsWith("www.") && !localHost(d) && !/\.\d+$/.test(d) && !SHARED_DOMAINS.has(d);
 
 /** An https address with no credentials, port or fragment, or null. */
 function httpsUrl(v: unknown): URL | null {
@@ -120,5 +132,33 @@ export function isSignupPage(site: KnownSite, url: string): boolean {
   });
 }
 
+/** The same document address, ignoring the query, the fragment, a trailing slash and "www.". */
+export function sameDocument(a: string, b: string): boolean {
+  if (!URL.canParse(a) || !URL.canParse(b)) return false;
+  const bare = (u: URL) => `${u.protocol}//${u.host.replace(/^www\./, "")}${u.pathname.replace(/\/+$/, "")}`;
+  return bare(new URL(a)) === bare(new URL(b));
+}
+
 /** Whether `url` is one of a known site's own document addresses. */
-export const isKnownDocument = (site: KnownSite | null, url: string) => !!site && (site.terms === url || site.privacy === url);
+export const isKnownDocument = (site: KnownSite | null, url: string) => !!site && (sameDocument(site.terms, url) || sameDocument(site.privacy, url));
+
+/**
+ * The kinds a page at `url` is read as in place. On a known site, a kind
+ * only when the page is its listed document; otherwise the listed address is
+ * read instead, however much the page mentions it.
+ */
+export function inPlaceKinds<K extends "terms" | "privacy">(kinds: K[], site: KnownSite | null, url: string): K[] {
+  return site ? kinds.filter((k) => sameDocument(site[k], url)) : kinds;
+}
+
+/** Every domain a known site uses: its own and its documents'. */
+const allDomains = (site: KnownSite) => [...site.domains, ...(site.legalDomains ?? [])];
+
+/** Permission patterns for all of a known site's domains, each with its subdomains: redirects between them are common. */
+export const siteOrigins = (site: KnownSite) => allDomains(site).flatMap((d) => [`https://${d}/*`, `https://*.${d}/*`]);
+
+/** Whether a host is on one of a known site's domains or legal domains. */
+export const onSiteDomains = (site: KnownSite, hostname: string) => {
+  const host = hostname.toLowerCase().replace(/\.$/, "");
+  return allDomains(site).some((d) => onDomain(host, d));
+};
