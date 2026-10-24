@@ -45,6 +45,8 @@ jobs:
             .output/*.zip
             .output/SHA256SUMS
             .output/RELEASE_NOTES.md
+          # .output is a hidden folder, which upload-artifact skips by default.
+          include-hidden-files: true
           if-no-files-found: error
 
   # Only this job may write, and only to create the release.
