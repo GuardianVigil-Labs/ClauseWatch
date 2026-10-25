@@ -19,6 +19,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
       # Self-test first: a guard that matches nothing reports success.
       - run: npm run leak-guard
       - run: npm run typecheck
@@ -34,3 +35,6 @@ jobs:
       - run: npm run check:rules
       # Recorded on every PR, in the job summary.
       - run: npm run size
+      # The built Chrome extension in a real Chromium (scripts/smoke.mjs).
+      - run: npx playwright install --with-deps chromium
+      - run: npm run smoke
