@@ -108,6 +108,16 @@ describe("combined custom-rule budgets and current storage", () => {
     await expect(applyRuleEdit(kv, rules, { type: "add", rules: [own()] })).rejects.toThrow(/patterns across/);
     expect(data.get("ownRules")).toEqual(existing);
   });
+  it("switches a signed rule back on while saved own rules are over budget, but not an own rule", async () => {
+    const { kv, data } = memory();
+    const over = Array.from({ length: 200 }, (_, n) => own({ id: `own-${n}`, all: ["payments", "cryptocurrency", "subscription"] }));
+    data.set("ownRules", over);
+    data.set("disabledRuleIds", ["binding-arbitration", "own-0"]);
+    await applyRuleEdit(kv, rules, { type: "toggle", id: "binding-arbitration", on: true });
+    expect(data.get("disabledRuleIds")).toEqual(["own-0"]);
+    await expect(applyRuleEdit(kv, rules, { type: "toggle", id: "own-0", on: true })).rejects.toThrow(/patterns across/);
+    expect(data.get("disabledRuleIds")).toEqual(["own-0"]);
+  });
   it("applies sequential edits to fresh storage rather than a stale settings snapshot", async () => {
     const { kv, data } = memory();
     await applyRuleEdit(kv, rules, { type: "add", rules: [own({ id: "own-first" })] });

@@ -33,7 +33,8 @@
         "Tous les litiges seront soumis à un arbitrage obligatoire conformément au présent accord.",
         "Tous les litiges qui ne peuvent pas être réglés à l’amiable seront soumis à un arbitrage obligatoire.",
         "Les litiges qui ne sont pas réglés à l’amiable dans un délai de trente jours seront soumis à un arbitrage obligatoire.",
-        "Aucun des litiges ne sera exempté de l’arbitrage obligatoire prévu par cet accord."
+        "Aucun des litiges ne sera exempté de l’arbitrage obligatoire prévu par cet accord.",
+        "Les litiges ne sont pas exclus de l'arbitrage obligatoire."
       ],
       "noMatch": [
         "Les litiges ne nécessitent pas un arbitrage obligatoire et restent soumis aux tribunaux.",
@@ -43,7 +44,8 @@
         "Les litiges ne sont plus soumis à un arbitrage obligatoire depuis la mise à jour de ces conditions.",
         "Les litiges ne nécessitent aucun arbitrage obligatoire et restent soumis aux tribunaux.",
         "Les litiges n’imposent en aucun cas un arbitrage obligatoire aux utilisateurs du service.",
-        "Aucun des litiges ne sera soumis à un arbitrage obligatoire conformément au présent accord."
+        "Aucun des litiges ne sera soumis à un arbitrage obligatoire conformément au présent accord.",
+        "Aucun des litiges ne nécessite un arbitrage obligatoire."
       ]
     }
   }

@@ -90,6 +90,7 @@ async function openResult(id: string): Promise<void> {
   catch { await browser.tabs.create({ url: browser.runtime.getURL(`/popup.html?scan=${encodeURIComponent(id)}`) }).catch(() => undefined); }
 }
 
+const SCAN_ALARM = "clausewatch-scans";
 const scans = new ScanJobs({
   store: jobStore,
   allowed: (origins) => browser.permissions.contains({ origins }).catch(() => false),
@@ -98,6 +99,11 @@ const scans = new ScanJobs({
   },
   fetch: (url, sites, signal, room) => fetchChosen(url, sites, signal, room),
   completed: (job) => openResult(job.id),
+  // The minute timer exists only while a job is kept: a queued job wakes the queue (storage change), which creates it; the pass that leaves none clears it.
+  pending: async (any) => {
+    if (!any) await browser.alarms.clear(SCAN_ALARM).catch(() => undefined);
+    else if (!(await browser.alarms.get(SCAN_ALARM).catch(() => undefined))) await Promise.resolve(browser.alarms.create(SCAN_ALARM, { periodInMinutes: 1 })).catch(() => undefined);
+  },
 });
 let ready: Promise<void> = Promise.resolve();
 const wakeScans = (answered?: string) => ready.then(async () => { await scans.expire(); await scans.wake(answered); }).catch(() => undefined);
@@ -151,9 +157,8 @@ export default defineBackground(() => {
   browser.alarms.create("clausewatch-tick", { periodInMinutes: 15 });
   browser.alarms.onAlarm.addListener((a) => {
     if (a.name === "clausewatch-tick") void tick();
-    if (a.name === "clausewatch-scans") void wakeScans();
+    if (a.name === SCAN_ALARM) void wakeScans();
   });
-  browser.alarms.create("clausewatch-scans", { periodInMinutes: 1 });
   browser.storage.onChanged.addListener((changes, area) => {
     if (area === "session" && Object.keys(changes).some((key) => key.startsWith(JOB_PREFIX))) void wakeScans();
     // Results remembered for quiet sites were read with the old rules: forget them when the rules change.

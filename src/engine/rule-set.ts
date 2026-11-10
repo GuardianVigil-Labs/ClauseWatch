@@ -228,7 +228,8 @@ export async function applyRuleEdit(kv: KV, base: CompiledRules, edit: RuleEdit)
   if (edit.type === "delete") { own = own.filter((r) => r?.id !== edit.id); disabled = disabled.filter((id) => id !== edit.id); }
   if (edit.type === "toggle") {
     if (typeof edit.id !== "string" || typeof edit.on !== "boolean") throw new Error("Invalid rule switch.");
-    if (edit.on) { const problem = ownCollectionProblem(own); if (problem) throw new Error(problem); }
+    // Only an own rule adds to the own-rule budget; a signed rule can always be switched back on.
+    if (edit.on && own.some((r) => r?.id === edit.id)) { const problem = ownCollectionProblem(own); if (problem) throw new Error(problem); }
     disabled = edit.on ? disabled.filter((id) => id !== edit.id) : [...new Set([...disabled, edit.id])];
   }
   const exists = new Set([...base.rules.map((r) => r.id), ...own.map((r) => r?.id)]);

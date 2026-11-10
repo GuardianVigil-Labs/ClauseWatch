@@ -87,7 +87,7 @@ const rawMatches = (rule: CompiledRules["rules"][number], text: string) =>
 
 /** Split only explicit contrasts after a denial; the full sentence remains the quote. */
 export function assertions(sentence: string): string[] {
-  if (!/\bnot\b|\bnever\b|\bcannot\b|\b(?:don|doesn|won|can)['’]t\b/i.test(sentence)) return [sentence];
+  if (!/\bnot\b|\bnever\b|\bno\b|\bunable\b|\bprohibit|\brestrict|\bcannot\b|\b(?:don|doesn|won|can)['’]t\b/i.test(sentence)) return [sentence];
   const parts: string[] = [];
   let start = 0;
   for (const separator of sentence.matchAll(/\b(?:but|however|yet|except(?:\s+that)?)\b|\band\s+(we|our\s+company)\b/gi)) {

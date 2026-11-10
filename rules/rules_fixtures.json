@@ -8,7 +8,10 @@
         "Nothing in these terms prevents us from using your content to train our machine learning models.",
         "We prohibit users from using automated tools, and we use your content to train and improve our AI models.",
         "We do not require consent and may use your content to train our AI models.",
-        "We do not use your content for advertising, but we may use your content to train our AI models."
+        "We do not use your content for advertising, but we may use your content to train our AI models.",
+        "We are unable to train on encrypted backups, but we may use your content to train our AI models.",
+        "We restrict our AI vendors from training on backups, but we may use your content to train our AI models.",
+        "We prohibit our vendors from using backups for training, but we may use your content to train our AI models."
       ],
       "noMatch": [
         "We do not use your content to train our AI models.",
@@ -98,7 +101,8 @@
         "We do not sell personal data, except that we sell personal data to advertising partners.",
         "We do not charge users and we may sell personal data to advertising partners.",
         "Our advertising partners may sell personal data to other advertisers unless you opt out.",
-        "We do not sell personal data overseas and we may sell personal data to local advertisers."
+        "We do not sell personal data overseas and we may sell personal data to local advertisers.",
+        "There is no sale of data to advertisers, but we sell personal data to analytics partners."
       ],
       "noMatch": [
         "We do not sell your personal information.",

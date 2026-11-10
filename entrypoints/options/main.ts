@@ -55,7 +55,6 @@ async function renderAi() {
   key.addEventListener("input", () => {
     if (!key.value.trim()) return;
     credential.value = "entered";
-    try { selectedEndpoint = aiEndpoint(base.value); } catch { selectedEndpoint = ""; }
   });
   if (current.mode === "key") {
     base.value = current.baseUrl;
@@ -65,7 +64,12 @@ async function renderAi() {
   base.addEventListener("input", () => {
     let same = false;
     try { same = current.mode === "key" && aiEndpoint(base.value) === aiEndpoint(current.baseUrl); } catch { /* Not yet a valid address. */ }
-    if (!same) {
+    if (same) return;
+    // A key typed here is bound to the address actually saved; only the saved key needs choosing again.
+    if (key.value.trim()) {
+      credential.value = "entered";
+      bound.textContent = "The key entered below will be used for this endpoint.";
+    } else {
       credential.value = "";
       bound.textContent = "Endpoint changed. Enter a new key or explicitly select the saved key for this destination.";
     }
@@ -88,7 +92,7 @@ async function renderAi() {
       if (mode.value === "key") {
         // Snapshot before the permission prompt: edits during it cannot change
         // which endpoint or credential this click saves.
-        if (selectedEndpoint !== aiEndpoint(base.value)) throw new Error("Choose a credential for this endpoint. The previous key will not be reused automatically.");
+        if (credential.value === "saved" && selectedEndpoint !== aiEndpoint(base.value)) throw new Error("Choose a credential for this endpoint. The previous key will not be reused automatically.");
         const next = keySettings(current, base.value, model.value, key.value, credential.value);
         const origin = `${new URL(next.baseUrl).origin}/*`;
         save.disabled = true;
@@ -99,6 +103,7 @@ async function renderAi() {
           return;
         }
         await kv.set("ai", next);
+        await releaseAiOrigin(current, next);
         current = next;
         selectedEndpoint = next.credentialEndpoint!;
         base.value = next.baseUrl; model.value = next.model;
@@ -106,8 +111,10 @@ async function renderAi() {
         credential.querySelector<HTMLOptionElement>('option[value="saved"]')!.disabled = false;
         bound.textContent = `Saved key selected for ${next.credentialEndpoint}.`;
       } else {
-        await kv.set("ai", { mode: mode.value as "off" | "builtin" });
-        current = { mode: mode.value as "off" | "builtin" };
+        const next = { mode: mode.value as "off" | "builtin" };
+        await kv.set("ai", next);
+        await releaseAiOrigin(current, next);
+        current = next;
         selectedEndpoint = "";
         key.value = ""; credential.value = "entered";
         credential.querySelector<HTMLOptionElement>('option[value="saved"]')!.disabled = true;
@@ -118,6 +125,16 @@ async function renderAi() {
   });
   s.append(mode, keyFields, save, msg);
   aiEl.replaceChildren(s);
+}
+
+const aiOrigin = (s: AiSettings) => (s.mode === "key" && URL.canParse(s.baseUrl) ? `${new URL(s.baseUrl).origin}/*` : "");
+
+/** Gives back the previous AI address's access once settings no longer use it, unless automatic mode holds every site. */
+async function releaseAiOrigin(before: AiSettings, after: AiSettings): Promise<void> {
+  const old = aiOrigin(before);
+  if (!old || old === aiOrigin(after)) return;
+  if (await browser.permissions.contains({ origins: AUTO_ORIGINS }).catch(() => false)) return;
+  await browser.permissions.remove({ origins: [old] }).catch(() => undefined);
 }
 
 /**

@@ -218,6 +218,36 @@ describe("independent background scans", () => {
     expect(x.records.has(waiting.id)).toBe(true);
   });
 
+  it("writes an expired job once, not again on every wake while its access cannot be removed", async () => {
+    const x = setup(); x.release.mockRejectedValue(new Error("busy"));
+    const old = newJob(plan(), [origin], [origin], "scan", 1000); old.state = "complete";
+    await x.store.put(old);
+    x.setNow(1000 + JOB_TTL_MS);
+    await x.runner.expire(); await x.runner.wake();
+    const put = vi.spyOn(x.store, "put");
+    await x.runner.expire(); await x.runner.wake();
+    expect(put).not.toHaveBeenCalled();
+    expect(x.records.get(old.id)?.released).toBeUndefined();
+  });
+
+  it("asks for the timer only while a job is kept, after a worker restart too", async () => {
+    const x = setup();
+    const pending = vi.fn(async (_any: boolean) => {});
+    const runner = new ScanJobs({ ...x.io, pending });
+    await runner.wake();
+    expect(pending).toHaveBeenLastCalledWith(false);
+    const job = newJob(plan(), [origin], [origin], "scan", 1000);
+    await x.store.put(job); await runner.wake();
+    expect(x.records.get(job.id)?.state).toBe("complete");
+    expect(pending).toHaveBeenLastCalledWith(true);
+    const restarted = new ScanJobs({ ...x.io, pending });
+    await restarted.recover(); await restarted.wake();
+    expect(pending).toHaveBeenLastCalledWith(true);
+    x.setNow(1000 + JOB_TTL_MS); await restarted.wake();
+    expect(x.records.size).toBe(0);
+    expect(pending).toHaveBeenLastCalledWith(false);
+  });
+
   it("does not checkpoint a download that finishes after the job expires", async () => {
     const x = setup();
     const job = newJob(plan(), [origin], [origin], "scan", 1000);

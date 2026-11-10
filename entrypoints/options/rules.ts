@@ -181,7 +181,7 @@ export async function renderRules(host: HTMLElement, note?: string): Promise<voi
       del.id = `delete-${r.id}`;
       del.type = "button";
       del.setAttribute("aria-label", `Delete ${r.title}`);
-      del.addEventListener("click", () => void save({ type: "delete", id: r.id }).catch((err) => redrawRules(host, String(err))));
+      del.addEventListener("click", () => void save({ type: "delete", id: r.id }).catch((err) => redrawRules(host, err instanceof Error ? err.message : "The rule could not be deleted.")));
       const delCell = el("td");
       delCell.append(del);
       tr.append(el("td", r.title, "mono"), el("td", topicShort(r.category)), el("td", merged.skipped.includes(r.id) ? "not running" : "my rule", "nowrap"), ruleSwitch(r.id, r.title, !disabled.includes(r.id), (on) => void toggle(r.id, on)), delCell);
@@ -297,8 +297,9 @@ export async function renderRules(host: HTMLElement, note?: string): Promise<voi
     void save({ type: "reset" }).catch((err) => { status.textContent = String(err); });
   });
   tools.append(importBtn, " ", exportBtn, " ", reset, pick);
-  importPane.append(el("p", "Import a rules file someone shared, or export your own. Imported rules pass the same checks as rules you write.", "note"), tools, status);
-  s.append(tablist, ...panes.map((x) => x.pane));
+  importPane.append(el("p", "Import a rules file someone shared, or export your own. Imported rules pass the same checks as rules you write.", "note"), tools);
+  // Above the tabs, so a switch, delete or import message shows whichever tab is open.
+  s.append(status, tablist, ...panes.map((x) => x.pane));
   show(panes.some((x) => x.id === openTab) ? openTab : "signed");
   host.replaceChildren(s);
 }

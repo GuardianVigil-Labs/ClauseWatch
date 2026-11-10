@@ -134,7 +134,7 @@ func readJSON(path string, v any) error {
 	return json.Unmarshal(b, v)
 }
 
-var denial = regexp.MustCompile(`(?i)\bnot\b|\bnever\b|\bcannot\b|\b(don|doesn|won|can)['’]t\b`)
+var denial = regexp.MustCompile(`(?i)\bnot\b|\bnever\b|\bno\b|\bunable\b|\bprohibit|\brestrict|\bcannot\b|\b(don|doesn|won|can)['’]t\b`)
 var contrast = regexp.MustCompile(`(?i)\b(?:but|however|yet|except(?:\s+that)?)\b|\band\s+(we|our\s+company)\b`)
 
 func matchesScoped(all, none []*regexp.Regexp, s, scope string) bool {

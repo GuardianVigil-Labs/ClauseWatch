@@ -70,6 +70,8 @@ interface JobIO {
   /** `room`: characters the page may take in the job. */
   fetch(url: string, sites: KnownSite[], signal: AbortSignal, room: number): Promise<Fetched>;
   completed?(job: ScanJob): Promise<void>;
+  /** Told after each pass whether any job is still kept, so a timer runs only while one is. */
+  pending?(any: boolean): Promise<void>;
   now?: () => number;
 }
 
@@ -108,9 +110,11 @@ export class ScanJobs {
       if (this.now() - job.at < JOB_TTL_MS) continue;
       this.controllers.get(job.id)?.abort();
       if (job.released) { await this.io.store.remove(job.id); continue; }
+      const before = JSON.stringify(job);
       clearPayload(job);
       if (activeJob(job)) { job.state = "failed"; job.reason = "This scan expired. Try again."; }
-      await this.io.store.put(job);
+      // Only a change is written: every write wakes the queue again.
+      if (JSON.stringify(job) !== before) await this.io.store.put(job);
     }
   }
 
@@ -132,6 +136,7 @@ export class ScanJobs {
       const jobs = (await this.io.store.list()).sort((a, b) => a.at - b.at);
       for (const job of jobs) {
         if (this.now() - job.at >= JOB_TTL_MS) {
+          const before = JSON.stringify(job);
           clearPayload(job);
           if (activeJob(job)) {
             job.state = "failed";
@@ -140,7 +145,7 @@ export class ScanJobs {
             job.updated = this.now();
             await this.io.store.put(job);
           } else if (job.released) await this.io.store.remove(job.id);
-          else await this.io.store.put(job);
+          else if (JSON.stringify(job) !== before) await this.io.store.put(job);
           continue;
         }
         if (job.state !== "waiting") { this.answered.delete(job.id); continue; }
@@ -152,6 +157,7 @@ export class ScanJobs {
       await this.releasePermissions();
       await this.prune();
     } while (this.dirty);
+    await this.io.pending?.((await this.io.store.list()).length > 0);
   }
 
   private async run(job: ScanJob): Promise<void> {

@@ -32,7 +32,7 @@ Free and open source, with no account, advertising or telemetry service. Downloa
 | `scripting` | Capture page/selection text and run automatic detection on permitted sites. |
 | `contextMenus` | Link and selected-text commands. |
 | `storage` | Settings, own rules, accepted signed updates, quote reports/history, optional full-text comparison versions and temporary scan jobs. |
-| `alarms` | Fifteen-minute rule-refresh/retention tick and a one-minute scan wake/expiry alarm. Rules download at most daily. |
+| `alarms` | Fifteen-minute rule-refresh/retention tick, and a one-minute scan wake/expiry alarm that exists only while a scan is kept. Rules download at most daily. |
 | Required access to `github.com` and `release-assets.githubusercontent.com` | Download the public signed English rule/known-site release. GitHub can redirect to release-asset storage; no visited-site list, application account identifier or cookies are added. |
 | Optional HTTP(S) host access | Requested for chosen policy hosts (including approved external legal hosts), broad automatic-mode operation, or the user's configured AI service. Scan-added access is released when no longer needed; prior access is preserved. Automatic access is requested only when enabled. |
 
