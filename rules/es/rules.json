@@ -36,8 +36,7 @@
         "(disputas|controversias).{0,100}(arbitraje vinculante|arbitraje obligatorio)"
       ],
       "none": [
-        "\\b(no|nunca|jam[aá]s|tampoco|ni)\\s+(se\\s+)?(requieren?|requerir[aá]n?|exigen?|exigir[aá]n?|est[aá]n?\\s+sujetas?|estar[aá]n?\\s+sujetas?|ser[aá]n?\\s+sometidas?|ser[aá]n?\\s+resueltas?|someten|someter[aá]n?|resuelven|resolver[aá]n?)\\s+(a\\s+|al\\s+|mediante\\s+|por\\s+)?(un\\s+|el\\s+)?arbitraje\\s+(vinculante|obligatorio)",
-        "\\bninguna?\\s+(de\\s+las\\s+|de\\s+los\\s+)?(disputas?|controversias?)\\b"
+        "\\b(no|nunca|jam[aá]s|tampoco|ni|ninguna?\\s+(de\\s+las\\s+|de\\s+los\\s+)?(disputas?|controversias?))\\s+(se\\s+)?(requieren?|requerir[aá]n?|exigen?|exigir[aá]n?|est[aá]n?\\s+sujetas?|estar[aá]n?\\s+sujetas?|ser[aá]n?\\s+sometidas?|ser[aá]n?\\s+resueltas?|someten|someter[aá]n?|resuelven|resolver[aá]n?)\\s+(a\\s+|al\\s+|mediante\\s+|por\\s+)?(un\\s+|el\\s+)?arbitraje\\s+(vinculante|obligatorio)"
       ]
     }
   ]

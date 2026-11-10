@@ -32,7 +32,8 @@
       "match": [
         "Tous les litiges seront soumis à un arbitrage obligatoire conformément au présent accord.",
         "Tous les litiges qui ne peuvent pas être réglés à l’amiable seront soumis à un arbitrage obligatoire.",
-        "Les litiges qui ne sont pas réglés à l’amiable dans un délai de trente jours seront soumis à un arbitrage obligatoire."
+        "Les litiges qui ne sont pas réglés à l’amiable dans un délai de trente jours seront soumis à un arbitrage obligatoire.",
+        "Aucun des litiges ne sera exempté de l’arbitrage obligatoire prévu par cet accord."
       ],
       "noMatch": [
         "Les litiges ne nécessitent pas un arbitrage obligatoire et restent soumis aux tribunaux.",

@@ -14,10 +14,19 @@ import { join } from "node:path";
 import { parse } from "acorn";
 
 /**
- * Where a script builds code from a string: a call or `new` of Function or
- * eval, by name or on the global object, also through `(0, eval)`, `a || eval` or
- * `c ? Function : f`; any other use of eval (`const e = eval`); and any
- * `x["eval"]` or `x["Function"]`. Returns the offsets found.
+ * Where a script could build code from a string. One rule: any reference to
+ * Function or eval as a value (a call, `new`, `const F = Function`,
+ * `Function.call(...)`, `Reflect.construct(Function, ...)`, `f(eval)`), and any
+ * Function or eval read from the global object (`globalThis.eval`,
+ * `window["Function"]`). A property or method of that name on another object
+ * (`o.eval`, `{ eval: 1 }`) is not a reference. Nor are `Function.prototype`
+ * and `Function.toString`, which bundled core-js reads to call methods and
+ * inspect native code; `Function.call`, `.apply` and `.bind` stay flagged.
+ * Returns the offsets found.
+ *
+ * This is a build-time safety net. The runtime control is the browser's
+ * extension content security policy, which blocks string-to-code outright; no
+ * static check can see every dynamic construction (code assembled from strings).
  */
 function stringToCode(source) {
   let ast;
@@ -28,24 +37,16 @@ function stringToCode(source) {
   }
   const banned = (v) => v === "Function" || v === "eval";
   const literal = (n) => (n.type === "Literal" && banned(n.value)) || (n.type === "TemplateLiteral" && n.expressions.length === 0 && banned(n.quasis[0].value.cooked));
-  // What a callee can evaluate to: the last of a comma expression, either side of || ?? &&, either branch of ?:.
-  const callees = (n) => n.type === "SequenceExpression" ? callees(n.expressions.at(-1))
-    : n.type === "LogicalExpression" ? [...callees(n.left), ...callees(n.right)]
-    : n.type === "ConditionalExpression" ? [...callees(n.consequent), ...callees(n.alternate)]
-    : n.type === "ChainExpression" ? callees(n.expression) : [n];
-  // A property of the global object (`globalThis.eval`), not a method of the same name (`prefilter.eval`).
   const global = (n) => n.type === "Identifier" && /^(globalThis|window|self|global|frames|top|parent)$/.test(n.name);
-  const named = (n) => (n.type === "Identifier" && banned(n.name)) || (n.type === "MemberExpression" && (n.computed ? literal(n.property) : global(n.object) && banned(n.property.name)));
   const found = [];
   const stack = [[ast, null, null]];
   while (stack.length) {
     const [n, parent, key] = stack.pop();
-    if ((n.type === "CallExpression" || n.type === "NewExpression") && callees(n.callee).some(named)) found.push(n.start);
-    else if (n.type === "MemberExpression" && n.computed && literal(n.property)) found.push(n.start);
-    else if (n.type === "Identifier" && n.name === "eval") {
+    if (n.type === "Identifier" && banned(n.name)) {
       const propertyName = (parent.type === "MemberExpression" && key === "property" && !parent.computed) || (/^(Property|MethodDefinition|PropertyDefinition)$/.test(parent.type) && key === "key" && !parent.computed && !parent.shorthand);
-      if (!propertyName) found.push(n.start);
-    }
+      const prototypeRead = n.name === "Function" && parent.type === "MemberExpression" && key === "object" && !parent.computed && /^(prototype|toString)$/.test(parent.property.name);
+      if (!propertyName && !prototypeRead) found.push(n.start);
+    } else if (n.type === "MemberExpression" && global(n.object) && (n.computed ? literal(n.property) : banned(n.property.name))) found.push(n.start);
     for (const [k, v] of Object.entries(n)) {
       for (const child of Array.isArray(v) ? v : [v]) if (child && typeof child.type === "string") stack.push([child, n, k]);
     }
@@ -54,9 +55,9 @@ function stringToCode(source) {
 }
 
 // The check must still catch each form, and pass ordinary code.
-const evasive = ["Function(source)()", "Function ('return this')()", "new Function('a', 'return a')", "new Function", "eval ('code')", "(0,eval)(source)", "(0, Function)(s)()", "globalThis.eval(s)", "window['eval'](s)", "top.Function(s)", "self.Function(s)", "const e = eval; e(s)", "(a || eval)(s)", "f(eval)", "x = { eval }", "Function/**/(s)", "Reflect.construct(globalThis[`Function`], [s])"];
+const evasive = ["Function(source)()", "Function ('return this')()", "new Function('a', 'return a')", "new Function", "eval ('code')", "(0,eval)(source)", "(0, Function)(s)()", "globalThis.eval(s)", "window['eval'](s)", "top.Function(s)", "self.Function(s)", "const e = eval; e(s)", "(a || eval)(s)", "f(eval)", "x = { eval }", "Function/**/(s)", "Reflect.construct(globalThis[`Function`], [s])", "const F = Function; F(s)()", "Function.call(null, s)()", "Reflect.construct(Function, [s])()", "const e = globalThis.eval; e(s)", "x instanceof Function", "typeof eval", "Function.bind(null, s)()"];
 for (const sample of evasive) if (stringToCode(sample).length === 0) { console.error(`self-test: missed ${sample}`); process.exit(1); }
-const clean = "const o = { eval: 1, Function: 2 }; o.eval; o.Function; o.eval(s); this.subs[0].eval(t); new o.Function(s); class C { eval() {} } x instanceof Function; typeof Function; s.replace(\"eval(\", ''); // eval(s) Function(s)\nconst t = `new Function(${s})`;";
+const clean = "const o = { eval: 1, Function: 2 }; o.eval; o.Function; o.eval(s); this.subs[0].eval(t); new o.Function(s); o['eval']; class C { eval() {} static Function = 1 } Function.prototype.call; i(Function.toString); s.replace(\"eval(\", ''); // eval(s) Function(s)\nconst t = `new Function(${s})`;";
 if (stringToCode(clean).length) { console.error("self-test: flagged clean code"); process.exit(1); }
 
 const out = ".output";
