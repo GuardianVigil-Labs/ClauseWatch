@@ -57,6 +57,12 @@ describe("release workflow", () => {
     }
   });
 
+  it("treats Edge's 202 as in progress and gives Firefox versions a licence", () => {
+    expect(jobs.stores).toMatch(/if \[ "\$code" = 202 \]; then sleep 10; continue; fi/);
+    expect(jobs.stores).toMatch(/"license":"Apache-2.0"/);
+    expect(jobs.stores).toMatch(/--amo-metadata /);
+  });
+
   it("uses store secrets nowhere outside the stores job", () => {
     const names = /secrets\.(CHROME|EDGE|AMO)_/;
     expect(jobs.stores).toMatch(names);
