@@ -3,19 +3,11 @@
 // Everything here runs on the device; nothing is sent anywhere.
 
 import { readableFetched } from "../engine/pdf";
-import { KINDS, kindsOfPage, readDocument, type DocumentResult, type Kind } from "../engine/documents";
+import { CHOSEN_TYPE_NOTICE, KINDS, kindsOfPage, readDocument, type DocumentResult, type Kind } from "../engine/documents";
+import type { ScanPlan } from "../scan/jobs";
 import { isKnownDocument, knownSite, localHost, siteOrigins, type KnownSite } from "../engine/known-sites";
 import type { CompiledRules } from "../engine/rules";
 import type { Fetched } from "../auto/background";
-
-/** A scan waiting for the one-site permission the popup asked for. */
-export interface PendingScan {
-  url: string;
-  kind: Kind | "auto";
-  at: number;
-  /** The sites asked for, as permission patterns: the scan finishes once all are granted. */
-  origins?: string[];
-}
 
 export interface ScanResult {
   site: string;
@@ -29,12 +21,6 @@ export interface ScanResult {
   groups?: { kind: Kind; urls: string[] }[];
   explicitKind?: boolean;
 }
-
-/** storage.session keys: saved before the permission prompt, which closes the popup. */
-export const PENDING_KEY = "scanPending";
-export const RESULT_KEY = "scanResult";
-/** A pending scan older than this is dropped rather than resumed. */
-export const PENDING_TTL_MS = 10 * 60 * 1000;
 
 export const siteOf = (url: string) => new URL(url).hostname.replace(/^www\./, "");
 
@@ -92,20 +78,19 @@ export function scanOrigins(url: string, kind: Kind | "auto", sites: KnownSite[]
   return [...new Set([...scanTargets(url, kind, sites).map((t) => `${new URL(t.url).origin}/*`), ...(known ? siteOrigins(known) : [])])];
 }
 
-/** Scans an address, reading a known site's own documents (scanTargets). */
-export async function scanAddress(url: string, kind: Kind | "auto", rules: CompiledRules, sites: KnownSite[], fetchText: (u: string) => Promise<Fetched>): Promise<ScanResult> {
-  const targets = scanTargets(url, kind, sites);
-  const documents: DocumentResult[] = [];
-  for (const t of targets) documents.push(...(await scanUrl(t.url, t.kind, rules, fetchText, kind !== "auto")).documents);
-  return { site: siteOf(url), documents };
-}
-
-/** Fetches what a scan of `url` reads, for the popup to read later (readFetched). */
-export async function fetchTargets(url: string, kind: Kind | "auto", sites: KnownSite[], fetchText: (u: string) => Promise<Fetched>): Promise<ScanResult> {
-  const pages: Record<string, Fetched> = {};
-  const targets = scanTargets(url, kind, sites);
-  for (const t of targets) pages[t.url] = await fetchText(t.url);
-  return { site: siteOf(url), documents: [], explicitKind: kind !== "auto", fetched: { url, kind, pages, targets } };
+/**
+ * Check again on a saved report: its documents read the way the first scan
+ * read them (the name and access-wall checks apply unless the person chose the
+ * type), with every domain of a known site for the redirects between them.
+ */
+export function checkAgainPlan(saved: { site: string; documents: DocumentResult[] }, sites: KnownSite[]): { plan: ScanPlan; origins: string[] } | null {
+  const targets = saved.documents.filter((d) => d.url && asAddress(d.url)).map((d) => ({ url: d.url!, kind: d.kind }));
+  if (!targets.length) return null;
+  const hosts = [saved.site, ...targets.map((t) => new URL(t.url).hostname)];
+  const known = [...new Set(hosts.map((h) => knownSite(sites, h)).filter((k): k is KnownSite => !!k))];
+  const origins = [...new Set([...targets.map((t) => `${new URL(t.url).origin}/*`), ...known.flatMap(siteOrigins)])];
+  const explicitKind = saved.documents.some((d) => d.status === "read" && !!d.notices?.includes(CHOSEN_TYPE_NOTICE));
+  return { plan: { site: saved.site, url: targets[0]!.url, kind: "auto", targets, documents: [], sites, explicitKind }, origins };
 }
 
 /** A scan result with any pages the background fetched read here, with these rules. */
@@ -154,8 +139,6 @@ export async function scanUrl(url: string, kind: Kind | "auto", rules: CompiledR
 export interface RecentSite {
   site: string;
   at: string;
-  /** SHA-256 of each document's text when last read. */
-  hashes: Partial<Record<Kind, string>>;
   /** Documents whose text differed from the check before, noted for 30 days. */
   changed: Kind[];
   changedAt?: string;
@@ -194,7 +177,6 @@ export function recentHistory(list: RecentSite[], now = Date.now()): RecentSite[
 export async function recordRecent(list: RecentSite[], site: string, documents: DocumentResult[], now = new Date()): Promise<RecentSite[]> {
   const cleaned = recentHistory(list, now.getTime());
   const before = cleaned.find((r) => r.site === site);
-  const hashes = { ...(before?.hashes ?? {}) };
   const sources = { ...(before?.documents ?? {}) };
   for (const d of documents) {
     if (d.status !== "read" || !d.body || !URL.canParse(d.url)) continue;
@@ -206,10 +188,9 @@ export async function recordRecent(list: RecentSite[], site: string, documents: 
     const changedAt = previous && previous.hash !== hash ? now.toISOString() : previous?.changedAt;
     delete sources[identity];
     sources[identity] = { kind: d.kind, hash, ...(changedAt ? { changedAt } : {}) };
-    hashes[d.kind] = hash;
   }
   const kept = Object.fromEntries(Object.entries(sources).slice(-20));
-  const entry: RecentSite = { site, at: now.toISOString(), hashes, documents: kept, changed: [], found: foundCount(documents) };
+  const entry: RecentSite = { site, at: now.toISOString(), documents: kept, changed: [], found: foundCount(documents) };
   return [recentHistory([entry], now.getTime())[0]!, ...cleaned.filter((r) => r.site !== site)].slice(0, MAX_RECENT);
 }
 
@@ -225,13 +206,4 @@ export async function readFirst(kind: Kind, urls: string[], tries: number, rules
     if (last.status === "read") break;
   }
   return last;
-}
-
-/** A saved pending scan, if still fresh and well formed. */
-export function freshPending(value: unknown, now = Date.now()): PendingScan | null {
-  const p = value as PendingScan | undefined;
-  if (!p || typeof p.url !== "string" || !asAddress(p.url) || typeof p.at !== "number") return null;
-  if (!["terms", "privacy", "auto"].includes(p.kind)) return null;
-  if (p.origins !== undefined && !(Array.isArray(p.origins) && p.origins.every((o) => typeof o === "string" && /^https?:\/\/(\*\.)?[^/*]+\/\*$/.test(o)))) return null;
-  return now - p.at <= PENDING_TTL_MS ? p : null;
 }

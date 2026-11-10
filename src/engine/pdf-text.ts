@@ -5,6 +5,11 @@ import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { WorkerMessageHandler } from "pdfjs-dist/legacy/build/pdf.worker.mjs";
 (globalThis as unknown as { pdfjsWorker: unknown }).pdfjsWorker = { WorkerMessageHandler };
 
+// PDF.js 6 has no eval path (its isEvalSupported option was removed), and the
+// Function("return this") fallback in the legacy build's bundled core-js is
+// replaced with globalThis at build time (wxt.config.ts). The modern build is
+// not used: it calls Map.prototype.getOrInsertComputed and Math.sumPrecise
+// unconditionally, which the oldest supported browsers lack.
 export async function extractPdf(data: Uint8Array): Promise<string> {
   const loading = getDocument({ data, useSystemFonts: false, useWorkerFetch: false, disableFontFace: true, enableXfa: false, disableAutoFetch: true, disableStream: true, stopAtErrors: true });
   try {
@@ -16,17 +21,33 @@ export async function extractPdf(data: Uint8Array): Promise<string> {
       const page = await pdf.getPage(n);
       const content = await page.getTextContent();
       let text = "";
+      let last: { end: number; y: number } | null = null;
       for (const item of content.items) {
         if (!("str" in item)) continue;
-        if (text && !/\s$/.test(text) && item.str && !/^\s/.test(item.str)) text += " ";
-        text += item.str + (item.hasEOL ? "\n" : "");
+        if (item.str) {
+          const [, , c, d, x, y] = item.transform as number[];
+          const em = Math.hypot(c!, d!) || 1;
+          // A run that starts where the previous one ended on the same line
+          // (kerned or restyled glyphs) continues the same word; a gap is a space.
+          const continues = last && Math.abs(y! - last.y) < em / 2 && Math.abs(x! - last.end) < em * 0.15;
+          if (text && !continues && !/\s$/.test(text) && !/^\s/.test(item.str)) text += " ";
+          text += item.str;
+          last = { end: x! + item.width, y: y! };
+        }
+        if (item.hasEOL) { text += "\n"; last = null; }
       }
       size += text.length;
       if (size > 200_000) throw new Error("The PDF contains too much text to read. Choose a shorter policy or paste its text.");
-      // Keep a short policy title separate from the first sentence. Ordinary
-      // wrapped text remains joined by the plain-text reader.
       const lines = text.split("\n");
-      if (lines[0] && lines[0].length <= 120 && !/[.!?]/.test(lines[0]) && /terms\s+(of|and|&)|privacy\s+(policy|notice|statement)|agreement/i.test(lines[0])) lines[0] += "\n";
+      // A heading (a short line without closing punctuation, after a sentence
+      // ends) is kept apart from the clause under it, in any language.
+      // Ordinary wrapped lines stay joined by the plain-text reader.
+      const widest = Math.max(...lines.map((l) => l.trim().length));
+      for (let i = 0; i < lines.length - 1; i++) {
+        const line = lines[i]!.trim();
+        const before = i === 0 ? "" : lines[i - 1]!.trim();
+        if (line && line.length <= 120 && line.length < widest * 0.7 && !/[.!?:;,]$/.test(line) && (!before || /[.!?:]$/.test(before)) && lines[i + 1]!.trim()) lines[i] += "\n";
+      }
       pages.push(lines.join("\n"));
       page.cleanup();
     }

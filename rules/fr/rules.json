@@ -15,8 +15,7 @@
         "nous (pouvons vendre|vendons) vos donn[eé]es personnelles"
       ],
       "none": [
-        "nous ne (vendons|pouvons)",
-        "\\b(ne|pas|jamais)\\b|n['’]"
+        "\\bnous\\s+ne\\s+(les\\s+)?(vendons|vendrons|pouvons)\\b"
       ]
     },
     {
@@ -27,8 +26,7 @@
         "(renouvel[eé]|renouvellera).{0,100}automatiquement"
       ],
       "none": [
-        "ne sera pas renouvel[eé] automatiquement|ne se renouvelle pas automatiquement",
-        "\\b(ne|pas|jamais)\\b|n['’]"
+        "\\bne\\s+(sera|seront|se|le|la)\\s+(pas|jamais|plus)\\s+renouvel|\\bne\\s+(se\\s+)?renouvel\\w*\\s+(pas|jamais|plus)\\b|\\bn['’](est|sera)\\s+(pas|jamais|plus)\\s+renouvel"
       ]
     },
     {
@@ -38,8 +36,7 @@
         "(litiges|diff[eé]rends).{0,100}(arbitrage obligatoire|arbitrage contraignant)"
       ],
       "none": [
-        "ne n[eé]cessitent pas un arbitrage obligatoire|ne seront pas soumis",
-        "\\b(ne|pas|jamais)\\b|n['’]"
+        "\\bne\\s+(n[eé]cessitent|n[eé]cessite|seront|sont|sera|est)\\s+(pas|jamais|plus)\\b[^.,;]{0,30}\\barbitrage"
       ]
     }
   ]

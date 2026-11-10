@@ -9,7 +9,7 @@ export const FOCUS_KEY = "scan:focus";
 export const JOB_PREFIX = "scan:job:";
 export const JOB_TTL_MS = 10 * 60 * 1000;
 export const MAX_JOBS = 8;
-const MAX_SESSION_CHARS = 2 * 1024 * 1024;
+export const MAX_SESSION_CHARS = 2 * 1024 * 1024;
 const MAX_RECOVERIES = 3;
 export interface ScanPlan {
   site: string;

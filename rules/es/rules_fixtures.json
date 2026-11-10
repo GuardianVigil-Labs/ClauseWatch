@@ -2,26 +2,33 @@
   "fixtures": {
     "es-data-sale": {
       "match": [
-        "Podemos vender sus datos personales a nuestros socios comerciales con su consentimiento."
+        "Podemos vender sus datos personales a nuestros socios comerciales con su consentimiento.",
+        "Podemos vender sus datos personales a nuestros socios comerciales si usted no se opone a ello."
       ],
       "noMatch": [
-        "No vendemos sus datos personales a nuestros socios comerciales en ninguna circunstancia."
+        "No vendemos sus datos personales a nuestros socios comerciales en ninguna circunstancia.",
+        "Nunca vendemos sus datos personales a terceros ni a nuestros socios comerciales."
       ]
     },
     "es-renewal": {
       "match": [
-        "Su suscripción se renueva automáticamente cada mes hasta que usted la cancele."
+        "Su suscripción se renueva automáticamente cada mes hasta que usted la cancele.",
+        "Su suscripción se renueva automáticamente cada mes si usted no la cancela antes de la fecha."
       ],
       "noMatch": [
-        "Su suscripción no se renueva automáticamente cuando termina el período contratado."
+        "Su suscripción no se renueva automáticamente cuando termina el período contratado.",
+        "Su plan nunca se renovará automáticamente sin una nueva confirmación de su parte."
       ]
     },
     "es-arbitration": {
       "match": [
-        "Todas las controversias se resolverán mediante arbitraje vinculante conforme a este acuerdo."
+        "Todas las controversias se resolverán mediante arbitraje vinculante conforme a este acuerdo.",
+        "Todas las controversias que no se resuelvan de manera informal se resolverán mediante arbitraje vinculante.",
+        "Todas las controversias se resolverán mediante arbitraje vinculante y no ante los tribunales ordinarios."
       ],
       "noMatch": [
-        "Las controversias no requieren arbitraje obligatorio y pueden resolverse ante los tribunales."
+        "Las controversias no requieren arbitraje obligatorio y pueden resolverse ante los tribunales.",
+        "Las controversias no estarán sujetas a arbitraje obligatorio y podrán resolverse ante los tribunales."
       ]
     }
   }

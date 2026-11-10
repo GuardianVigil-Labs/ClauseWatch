@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { JOB_TTL_MS, MAX_JOBS, ScanJobs, activeJob, newJob, type JobStore, type ScanJob, type ScanPlan } from "../src/scan/jobs";
+import { JOB_TTL_MS, MAX_JOBS, MAX_SESSION_CHARS, ScanJobs, activeJob, newJob, type JobStore, type ScanJob, type ScanPlan } from "../src/scan/jobs";
 import type { KnownSite } from "../src/engine/known-sites";
-import type { Fetched } from "../src/auto/background";
-import { readFetched, fetchTargets } from "../src/ui/scan";
+import { MAX_PDF_BYTES, type Fetched } from "../src/auto/background";
+import { readFetched, scanTargets } from "../src/ui/scan";
 import { compileRules, type RulesFile } from "../src/engine/rules";
 import rulesFile from "../rules/rules.json";
 
@@ -43,6 +43,17 @@ describe("independent background scans", () => {
     expect(x.release).toHaveBeenCalledExactlyOnceWith([origin]);
     expect(x.records.get(first.id)?.released).toBe(true);
     expect(x.completed).not.toHaveBeenCalled();
+  });
+
+  it("keeps the largest PDF a download allows, next to another document", async () => {
+    const x = setup();
+    x.fetch.mockImplementation(async (url) => url.endsWith("terms")
+      ? { ok: true, url, text: "", contentType: "application/pdf", pdf: "A".repeat(Math.ceil(MAX_PDF_BYTES / 3) * 4) }
+      : { ok: true, url, text: "x".repeat(256 * 1024), contentType: "text/html" });
+    const job = newJob(plan(), [origin], [], "scan", 1000);
+    await x.store.put(job); await x.runner.wake();
+    expect(x.records.get(job.id)?.state).toBe("complete");
+    expect(JSON.stringify(x.records.get(job.id)).length).toBeLessThanOrEqual(MAX_SESSION_CHARS);
   });
 
   it("never releases origins held before the scan", async () => {
@@ -305,7 +316,8 @@ describe("immutable fetched targets", () => {
   const fetcher = async (url: string): Promise<Fetched> => ({ ok: true, url, text: `<h1>${url.includes("privacy") ? "Privacy Policy" : "Terms of Service"}</h1><p>${filler}</p>`, contentType: "text/html" });
   it("reads the original fetched URLs even if a later rules release moves them", async () => {
     const before = [{ id: "service", name: "Service", domains: ["service.example"], terms: "https://service.example/old-terms", privacy: "https://service.example/old-privacy" }];
-    const fetched = await fetchTargets("https://service.example/", "auto", before, fetcher);
+    const targets = scanTargets("https://service.example/", "auto", before);
+    const fetched = { site: "service.example", documents: [], fetched: { url: "https://service.example/", kind: "auto" as const, targets, pages: Object.fromEntries(await Promise.all(targets.map(async (t) => [t.url, await fetcher(t.url)] as const))) } };
     const after = [{ ...before[0]!, terms: "https://service.example/new-terms", privacy: "https://service.example/new-privacy" }];
     const result = await readFetched(fetched, rules, after);
     expect(result.documents.map((d) => [d.kind, d.status, d.url])).toEqual([["terms", "read", before[0]!.terms], ["privacy", "read", before[0]!.privacy]]);

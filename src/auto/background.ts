@@ -44,6 +44,14 @@ export const OFF_SITE_REASON = "The page redirected to another site, which Claus
 export const TIMEOUT_REASON = "The page took too long to respond. Try again.";
 export const CANCELLED_REASON = "The scan was cancelled.";
 const TOO_LARGE_REASON = "The page is too large to read.";
+/**
+ * A PDF is kept as base64 (4/3 of its size) in a scan job, whose session
+ * storage holds at most 2 MiB of text (MAX_SESSION_CHARS in src/scan/jobs.ts).
+ * At most 1.125 MiB keeps one PDF within three quarters of that, room left for
+ * the job itself and its other document, so a PDF that downloads can be kept.
+ */
+export const MAX_PDF_BYTES = 1152 * 1024;
+export const PDF_TOO_LARGE_REASON = "The PDF is too large to read here (over 1.1 MB). Open it and paste the policy text.";
 
 /** A deadline covers headers and the streamed body, including a stalled stream. */
 export async function fetchText(url: string, staysOn?: (nextUrl: string) => boolean, signal?: AbortSignal): Promise<Fetched> {
@@ -76,6 +84,7 @@ export async function fetchText(url: string, staysOn?: (nextUrl: string) => bool
     if (Number.isFinite(declared) && declared > MAX_BYTES) return { ok: false, reason: TOO_LARGE_REASON };
     const pdfChunks: Uint8Array[] = [];
     let isPdf = response.headers.get("content-type")?.toLowerCase().includes("application/pdf") ?? false;
+    if (isPdf && Number.isFinite(declared) && declared > MAX_PDF_BYTES) return { ok: false, reason: PDF_TOO_LARGE_REASON };
     const decoder = new TextDecoder();
     const chunks: string[] = [];
     let bytes = 0;
@@ -87,6 +96,7 @@ export async function fetchText(url: string, staysOn?: (nextUrl: string) => bool
         bytes += part.value.byteLength;
         if (bytes > MAX_BYTES) return { ok: false, reason: TOO_LARGE_REASON };
         if (bytes === part.value.byteLength && new TextDecoder().decode(part.value.subarray(0, 5)) === "%PDF-") isPdf = true;
+        if (isPdf && bytes > MAX_PDF_BYTES) return { ok: false, reason: PDF_TOO_LARGE_REASON };
         pdfChunks.push(part.value);
         if (!isPdf) chunks.push(decoder.decode(part.value, { stream: true }));
       }
@@ -95,6 +105,7 @@ export async function fetchText(url: string, staysOn?: (nextUrl: string) => bool
       let signature = "";
       for (const chunk of pdfChunks) { signature += String.fromCharCode(...chunk.subarray(0, 5 - signature.length)); if (signature.length === 5) break; }
       isPdf = signature === "%PDF-";
+      if (isPdf && bytes > MAX_PDF_BYTES) return { ok: false, reason: PDF_TOO_LARGE_REASON };
     }
     if (isPdf) {
       const binary: string[] = [];

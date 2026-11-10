@@ -26,25 +26,11 @@ const own = (over: Partial<OwnRule> = {}): OwnRule => ({
 afterEach(() => vi.restoreAllMocks());
 
 describe("unsigned rules when re2js cannot read a pattern", () => {
-  it("a must-not-match that fails always excludes, a must-match that fails never matches: the rule finds nothing", () => {
-    const rule = compileUnsigned({ id: "x", category: "ai_training", all: ["\\btrain\\b"], none: ["\\bnot\\b"] }, known, { parse: false });
-    const spy = vi.spyOn(RE2JS, "compile").mockImplementation(() => {
-      throw new Error("unreadable");
-    });
-    expect(rule.all[0]!.test("we train models")).toBe(false);
-    expect(rule.none[0]!.test("we train models")).toBe(true);
-    // Compiled once, then remembered as unreadable.
-    rule.all[0]!.test("again");
-    expect(spy).toHaveBeenCalledTimes(2);
-  });
-
-  it("by default a pattern is parsed when the rule is written, so a mistake is named at once", () => {
+  it("a pattern is parsed when the rule is written, so a mistake is named at once", () => {
     vi.spyOn(RE2JS, "compile").mockImplementation(() => {
       throw new Error("unreadable");
     });
     expect(() => compileUnsigned({ id: "x", category: "ai_training", all: ["\\btrain\\b"], none: [] }, known)).toThrow(/not a valid regular expression/);
-    // Loading rules for a page parses nothing up front.
-    expect(() => compileUnsigned({ id: "x", category: "ai_training", all: ["\\btrain\\b"], none: [] }, known, { parse: false })).not.toThrow();
   });
 
   it("loading switched-off own rules does not compile their patterns", () => {

@@ -48,7 +48,7 @@ Under **Policies on other sites (optional)**, select the policies you want to re
 
 ### PDFs
 
-Scan the PDF address, or use **Read this PDF** when the extension recognises the address as a PDF. Extraction runs locally, with a 100-page limit, 200,000 extracted-character limit and 15-second deadline. Downloads still have the 2 MiB and 20-second limits. Image-only PDFs need a text version; password-protected PDFs must be opened by you and their text pasted or selected. Automatic cards direct PDF reading to the popup. No OCR or remote conversion service is used.
+Scan the PDF address, or use **Read this PDF** when the extension recognises the address as a PDF. Extraction runs locally, with a 100-page limit, 200,000 extracted-character limit and 15-second deadline. Downloads still have the 20-second limit, and a PDF download is limited to 1.1 MB (1,152 KiB) so the scan can keep it; a larger PDF is refused before it is read. Image-only PDFs need a text version; password-protected PDFs must be opened by you and their text pasted or selected. Automatic cards direct PDF reading to the popup. No OCR or remote conversion service is used.
 
 ### Right-click menu
 

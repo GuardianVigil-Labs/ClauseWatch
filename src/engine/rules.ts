@@ -27,6 +27,9 @@ export interface CompiledRules {
   categories: string[];
   rules: { id: string; category: string; all: Pattern[]; none: Pattern[]; scope?: "assertion" }[];
   skipped?: string[];
+  /** The person's choices (set by mergeRules), kept so a language pack can apply them too. */
+  disabled?: string[];
+  own?: CompiledRules["rules"];
 }
 
 export interface Finding {

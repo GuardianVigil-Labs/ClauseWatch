@@ -26,32 +26,10 @@ export const MAX_UNSIGNED_PATTERNS = 600;
 // sentence, so a copied rule finds what the signed one does.
 const ODD_SPACE = /[\v\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]/g;
 
-/**
- * An unsigned pattern: checked now, compiled on re2js the first time it tests a
- * sentence, so a page with no documents to read compiles nothing.
- */
+/** The sentence with odd spaces made plain, worked out once for all the patterns that test it. */
 let lastIn = "";
 let lastOut = "";
-/** The sentence with odd spaces made plain, worked out once for all the patterns that test it. */
 const plain = (s: string) => (s === lastIn ? lastOut : ((lastIn = s), (lastOut = s.replace(ODD_SPACE, " "))));
-
-function lazyPattern(p: string, onFailure: boolean): { test(s: string): boolean } {
-  let re: ReturnType<typeof RE2JS.compile> | null | false = null;
-  return {
-    test(s: string) {
-      if (re === null) {
-        try {
-          re = RE2JS.compile(p, RE2JS.CASE_INSENSITIVE);
-        } catch {
-          re = false;
-        }
-      }
-      // A pattern re2js cannot read fails safe: a must-match never matches, and a
-      // must-not-match always does, so the rule finds nothing rather than too much.
-      return re === false ? onFailure : re.test(plain(s));
-    },
-  };
-}
 
 /** A rule the person wrote or imported, kept only on this device. */
 export interface OwnRule {
@@ -68,33 +46,29 @@ export interface OwnRule {
 type Compiled = CompiledRules["rules"][number];
 
 /** Compiles one unsigned rule on re2js, or says why it cannot run. */
-export function compileUnsigned(r: { id: string; category: string; all: string[]; none: string[]; scope?: "assertion" }, known: string[], { parse = true } = {}): Compiled {
+export function compileUnsigned(r: { id: string; category: string; all: string[]; none: string[]; scope?: "assertion" }, known: string[]): Compiled {
   if (r.scope !== undefined && r.scope !== "assertion") throw new Error("Unknown match scope.");
   if (!r.id || typeof r.id !== "string") throw new Error("A rule needs an id.");
   if (!known.includes(r.category)) throw new Error(`"${r.id}": unknown topic "${r.category}".`);
   if (!Array.isArray(r.all) || r.all.length === 0) throw new Error(`"${r.id}": at least one pattern must match.`);
   if (r.none !== undefined && !Array.isArray(r.none)) throw new Error(`"${r.id}": exclusions must be a list of patterns.`);
   const none = Array.isArray(r.none) ? r.none : [];
-  const compile = (ps: unknown[], onFailure: boolean) => {
+  const compile = (ps: unknown[]) => {
     if (ps.length > PATTERN_LIMITS.patternsPerRule) throw new Error(`"${r.id}": at most ${PATTERN_LIMITS.patternsPerRule} patterns in a list.`);
     return ps.map((p) => {
       if (typeof p !== "string") throw new Error(`"${r.id}": a pattern must be text.`);
       const problem = patternProblem(p);
       if (problem) throw new Error(`"${r.id}": ${problem}`);
-      // When a rule is written or imported, parsed now so a mistake is named; when
-      // rules load for a page, only on first use (see lazyPattern).
-      if (parse) {
-        try {
-          const compiled = RE2JS.compile(p, RE2JS.CASE_INSENSITIVE);
-          return { test: (s: string) => compiled.test(plain(s)) };
-        } catch {
-          throw new Error(`"${r.id}": the pattern "${p.slice(0, 60)}" is not a valid regular expression.`);
-        }
+      // Parsed now, so a mistake is named and a rule that cannot run is left out (mergeRules).
+      try {
+        const compiled = RE2JS.compile(p, RE2JS.CASE_INSENSITIVE);
+        return { test: (s: string) => compiled.test(plain(s)) };
+      } catch {
+        throw new Error(`"${r.id}": the pattern "${p.slice(0, 60)}" is not a valid regular expression.`);
       }
-      return lazyPattern(p, onFailure);
     });
   };
-  return { id: r.id, category: r.category, scope: r.scope, all: compile(r.all, false), none: compile(none, true) };
+  return { id: r.id, category: r.category, scope: r.scope, all: compile(r.all), none: compile(none) };
 }
 
 const matches = (rule: Compiled, s: string, minWords: number) => analyse(buildDocument(textToBlocks(s)), { version: 0, minQuoteWords: minWords, categories: [rule.category], rules: [rule] }).length > 0;
@@ -130,7 +104,7 @@ export function ownRuleProblem(r: OwnRule, known: string[], minWords = DEFAULT_M
  * The rule set to run. An own rule that cannot run is left out, never run
  * unchecked; an id already taken is left out too.
  */
-export function mergeRules(base: CompiledRules, o: { disabled: string[]; own: OwnRule[] }): CompiledRules & { skipped: string[] } {
+export function mergeRules(base: CompiledRules, o: { disabled: string[]; own: OwnRule[] }): CompiledRules & { skipped: string[]; disabled: string[]; own: Compiled[] } {
   const off = new Set(o.disabled);
   const rules: Compiled[] = base.rules.filter((r) => !off.has(r.id));
   const ids = new Set(base.rules.map((r) => r.id));
@@ -144,6 +118,7 @@ export function mergeRules(base: CompiledRules, o: { disabled: string[]; own: Ow
     else if (!off.has(rule.id)) unsigned.push(rule);
   });
   let patterns = 0;
+  const ownCompiled: Compiled[] = [];
   for (const r of unsigned) {
     const count = r.all.length + (Array.isArray(r.none) ? r.none.length : 0);
     // Every pattern looked at counts, kept or not, so a long list of bad rules costs no more than good ones.
@@ -153,7 +128,9 @@ export function mergeRules(base: CompiledRules, o: { disabled: string[]; own: Ow
       continue;
     }
     try {
-      rules.push(compileUnsigned(r, base.categories));
+      const compiled = compileUnsigned(r, base.categories);
+      rules.push(compiled);
+      ownCompiled.push(compiled);
       ids.add(r.id);
     } catch {
       skipped.push(r.id);
@@ -161,7 +138,7 @@ export function mergeRules(base: CompiledRules, o: { disabled: string[]; own: Ow
   }
   // A topic with every rule switched off was not checked: it is left out, never shown as "not found".
   const categories = base.categories.filter((c) => rules.some((r) => r.category === c));
-  return { ...base, categories, rules, skipped };
+  return { ...base, categories, rules, skipped, disabled: [...off], own: ownCompiled };
 }
 
 /** The rule set for this device, from the signed base and what is stored. */

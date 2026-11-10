@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CANCELLED_REASON, FETCH_TIMEOUT_MS, fetchChosen, fetchText, MAX_BYTES, OFF_SITE_REASON, TIMEOUT_REASON } from "../src/auto/background";
+import { CANCELLED_REASON, FETCH_TIMEOUT_MS, fetchChosen, fetchText, MAX_BYTES, MAX_PDF_BYTES, OFF_SITE_REASON, PDF_TOO_LARGE_REASON, TIMEOUT_REASON } from "../src/auto/background";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 const url = "https://service.example/terms";
@@ -47,6 +47,20 @@ describe("bounded document downloads", () => {
     expect(await fetchText(url)).toEqual({ ok: false, reason: "The page is too large to read." });
     expect(reads).toBe(2);
     expect(cancelled).toHaveBeenCalledOnce();
+  });
+
+  it("refuses a PDF too large to keep in a scan, up front, and downloads one at the limit", async () => {
+    const pdf = (size: number, headers: HeadersInit = {}) => {
+      const body = new Uint8Array(size).fill(32);
+      body.set(new TextEncoder().encode("%PDF-"));
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(body, { headers })));
+    };
+    pdf(MAX_PDF_BYTES + 1);
+    expect(await fetchText(url)).toEqual({ ok: false, reason: PDF_TOO_LARGE_REASON });
+    pdf(10, { "content-type": "application/pdf", "content-length": String(MAX_PDF_BYTES + 1) });
+    expect(await fetchText(url)).toEqual({ ok: false, reason: PDF_TOO_LARGE_REASON });
+    pdf(MAX_PDF_BYTES);
+    expect(await fetchText(url)).toMatchObject({ ok: true, contentType: "application/pdf" });
   });
 
   it("decodes UTF-8 split across chunks and accepts an empty body", async () => {

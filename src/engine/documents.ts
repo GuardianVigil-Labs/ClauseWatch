@@ -79,6 +79,9 @@ export function discoverLinks(html: string, pageUrl: string, { external = false 
   return out;
 }
 
+/** The notice on a document whose type the person chose, so its name and access wall were not checked. */
+export const CHOSEN_TYPE_NOTICE = "You chose the document type. ClauseWatch has not verified that this text is the complete policy.";
+
 export type DocumentResult =
   | { kind: Kind; status: "read"; url: string; readAt: string; categories: CategoryResult[]; body: string; coverage?: Coverage; notices?: string[] }
   | { kind: Kind; status: "could_not_read"; url?: string; reason: string };
@@ -99,7 +102,7 @@ export function readDocument(kind: Kind, url: string, content: string, contentTy
     return { kind, status: "could_not_read", url, reason: coverage.status === "unsupported" && coverage.confident ? `Language coverage: ${coverage.language}. No built-in rule pack covers this language. Choose the document type to check it with the English rules only.` : "The document type could not be recognised. Choose Terms or Privacy to read the text, or open the policy in a tab after it has loaded." };
   }
   return { kind, status: "read", url, readAt: new Date().toISOString(), body: doc.body, coverage,
-    notices: [...(rules.skipped?.length ? [`${rules.skipped.length} custom rules did not run. Review Settings → Rules for details.`] : []), ...(explicitKind ? ["You chose the document type. ClauseWatch has not verified that this text is the complete policy."] : []), ...(!rendered && (type.includes("html") || !type) ? ["Read from downloaded HTML. Visibility controlled by styles or scripts could not be verified; use the visible-page reader to check what is displayed."] : [])],
+    notices: [...(rules.skipped?.length ? [`${rules.skipped.length} custom rules did not run. Review Settings → Rules for details.`] : []), ...(explicitKind ? [CHOSEN_TYPE_NOTICE] : []), ...(!rendered && (type.includes("html") || !type) ? ["Read from downloaded HTML. Visibility controlled by styles or scripts could not be verified; use the visible-page reader to check what is displayed."] : [])],
     categories: byCategory(analyse(doc, activeRules), activeRules) };
 
 }

@@ -42,6 +42,14 @@ for (const b of builds) {
     console.error(`${b}: minimum browser version must be at least ${need} (found ${min ?? "none"})`);
     failed = true;
   }
+  // No string-to-code calls in the shipped scripts (store reviewers flag them).
+  const scripts = readdirSync(join(out, b), { recursive: true }).filter((f) => /\.m?js$/.test(f));
+  for (const f of scripts) {
+    if (/\bFunction\(\s*["'`]|\bnew Function\b|(?<![.\w$}])eval\(/.test(readFileSync(join(out, b, f), "utf8"))) {
+      console.error(`${b}: ${f} builds code from a string (Function or eval)`);
+      failed = true;
+    }
+  }
   // The licence ships with every build (Apache-2.0 §4).
   for (const f of ["LICENSE", "NOTICE"]) {
     if (!existsSync(join(out, b, f))) {

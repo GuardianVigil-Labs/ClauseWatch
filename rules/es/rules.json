@@ -15,8 +15,7 @@
         "(vendemos|podemos vender) (sus |tus )?datos personales"
       ],
       "none": [
-        "no (vendemos|podemos vender)",
-        "\\b(no|nunca|jam[aá]s)\\b"
+        "\\b(no|nunca|jam[aá]s)\\s+(les\\s+|le\\s+)?(vendemos|venderemos|podemos\\s+vender)\\b"
       ]
     },
     {
@@ -27,8 +26,7 @@
         "(renueva|renovar[aá]).{0,100}autom[aá]ticamente"
       ],
       "none": [
-        "no se (renueva|renovar[aá])",
-        "\\b(no|nunca|jam[aá]s)\\b"
+        "\\b(no|nunca|jam[aá]s)\\s+(se\\s+|la\\s+|lo\\s+)?(renueva|renovar)"
       ]
     },
     {
@@ -38,8 +36,7 @@
         "(disputas|controversias).{0,100}(arbitraje vinculante|arbitraje obligatorio)"
       ],
       "none": [
-        "no.{0,100}(arbitraje vinculante|arbitraje obligatorio)",
-        "\\b(no|nunca|jam[aá]s)\\b"
+        "\\b(no|nunca)\\s+(se\\s+)?(requieren?|exigen?|est[aá]n\\s+sujetas?|estar[aá]n\\s+sujetas?|ser[aá]n\\s+sometidas?|someter[aá]n|resolver[aá]n)\\s+(a\\s+|mediante\\s+|por\\s+)?(un\\s+)?arbitraje\\s+(vinculante|obligatorio)"
       ]
     }
   ]

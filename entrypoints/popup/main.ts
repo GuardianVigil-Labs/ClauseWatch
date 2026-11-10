@@ -19,7 +19,7 @@ import { kv } from "../../src/storage";
 import { AUTO_ORIGINS, cachedDocs, readKey } from "../../src/auto/background";
 import { inPlaceKinds, knownSite, siteOrigins, type KnownSite } from "../../src/engine/known-sites";
 import {
-  asAddress, isOwnText, readFetched, recordRecent, recentHistory, scanOrigins, scanTargets, scanPasted,
+  asAddress, checkAgainPlan, isOwnText, readFetched, recordRecent, recentHistory, scanOrigins, scanTargets, scanPasted,
   RECENT_KEY, type RecentSite, type ScanResult,
 } from "../../src/ui/scan";
 import { FOCUS_KEY, JOB_PREFIX, JOB_TTL_MS, jobKey, type ScanJob, type ScanPlan } from "../../src/scan/jobs";
@@ -36,7 +36,6 @@ const file = await currentRulesFile(kv, BUNDLED);
 const sites = file.sites ?? [];
 const rules = await loadRules(kv, compileRules(file));
 if (location.search) { document.body.style.width = "min(960px, 100vw)"; document.body.style.maxHeight = "none"; }
-const MAX_PAGE_BYTES = 2 * 1024 * 1024;
 const MAX_TRIES_PER_KIND = 4;
 // Each tab has its own panel, so neither can write over the other.
 const main = document.getElementById("main")!;
@@ -51,22 +50,6 @@ function say(text: string, note = false, panel: HTMLElement = main) {
   panel.replaceChildren(p);
 }
 
-const CATEGORY_NAMES: Record<string, string> = {
-  ai_training: "AI training on your content",
-  arbitration: "arbitration",
-  ip_assignment: "rights over your content",
-  data_sale: "sale of personal data",
-  unilateral_change: "changes without notice",
-  data_retention: "data kept after you leave",
-  ad_sharing: "data shared for advertising",
-  auto_renewal: "automatic renewal",
-  liability_limit: "limits on liability",
-  governing_law: "governing law and courts",
-  children_data: "children's data",
-  location_biometric: "location and biometric data",
-  termination: "account closed at the company's discretion",
-};
-
 const savedReportButton = document.createElement("button");
 savedReportButton.textContent = "Latest report";
 savedReportButton.onclick = async () => {
@@ -77,12 +60,13 @@ savedReportButton.onclick = async () => {
   if (!saved || Date.now()-saved.at >= 7*864e5) { await kv.remove("latestReport"); say("No saved report is available. Saved quotes expire after seven days.", true); return; }
   show(saved.site, saved.documents, undefined, { final: false, savedVersion: saved.version });
   main.append(el("p", `Saved ${new Date(saved.at).toLocaleString()}; rules version ${saved.version}. Full document bodies are not retained in this report.`, "note"));
-  const targets = saved.documents.filter((d) => d.url && asAddress(d.url)).map((d) => ({ url: d.url!, kind: d.kind }));
-  const origins = [...new Set(targets.map((t) => `${new URL(t.url).origin}/*`))];
-  const held = await heldOrigins(origins);
+  const recheck = checkAgainPlan(saved, sites);
+  if (!recheck) return;
+  const held = await heldOrigins(recheck.origins);
+  if (generation !== pageGeneration) return;
   const again = el("button", "Check again");
-  again.onclick = () => { const next = requestScan({ site: saved.site, url: targets[0]!.url, kind: "auto", targets, documents: [], sites, explicitKind: true }, origins, held, "scan"); void next.saved.then(() => viewJob(next.job.id)); };
-  if (targets.length) main.append(again);
+  again.onclick = () => { const next = requestScan(recheck.plan, recheck.origins, held, "scan"); void next.saved.then(() => viewJob(next.job.id)); };
+  main.append(again);
 };
 document.querySelector("header")!.append(savedReportButton);
 

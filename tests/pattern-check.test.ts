@@ -2,6 +2,10 @@ import { describe, it, expect } from "vitest";
 import { patternProblem, smallestPeriod } from "../src/engine/pattern-check";
 import { compileRules, type RulesFile } from "../src/engine/rules";
 import bundled from "../rules/rules.json";
+import es from "../rules/es/rules.json";
+import fr from "../rules/fr/rules.json";
+
+const ALL_RULES = [bundled, es, fr] as unknown as RulesFile[];
 
 // Patterns that can freeze a browser are refused before they compile.
 
@@ -113,9 +117,8 @@ describe("patternProblem", () => {
     expect(patternProblem(p)).toBeNull();
   });
 
-  it("accepts every bundled rule", () => {
-    const file = bundled as unknown as RulesFile;
-    for (const r of file.rules) for (const p of [...r.all, ...r.none]) expect(patternProblem(p), `${r.id}: ${p}`).toBeNull();
+  it("accepts every bundled rule, language packs included", () => {
+    for (const file of ALL_RULES) for (const r of file.rules) for (const p of [...r.all, ...r.none]) expect(patternProblem(p), `${r.id}: ${p}`).toBeNull();
   });
 
   it("is enforced by compileRules", () => {
@@ -123,10 +126,9 @@ describe("patternProblem", () => {
     expect(() => compileRules(file)).toThrow(/bad: a repeated group/);
   });
 
-  it("bundled patterns stay fast on hostile text", () => {
-    const file = compileRules(bundled as unknown as RulesFile);
-    const hostile = ["a".repeat(5000), " ".repeat(5000), "a ".repeat(2500), "binding ".repeat(600) + "!", "-".repeat(5000)];
-    for (const r of file.rules) {
+  it("bundled patterns stay fast on hostile text, language packs included", () => {
+    const hostile = ["a".repeat(5000), " ".repeat(5000), "a ".repeat(2500), "binding ".repeat(600) + "!", "-".repeat(5000), "no ".repeat(1700), "ne pas ".repeat(700), "controversias ".repeat(350) + "arbitraje"];
+    for (const r of ALL_RULES.flatMap((f) => compileRules(f).rules)) {
       for (const re of [...r.all, ...r.none]) {
         for (const s of hostile) {
           const t = performance.now();

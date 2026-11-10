@@ -111,9 +111,10 @@ describe("the rule set", () => {
     expect(mergeRules(base, { disabled: ["binding-arbitration"], own: [] }).categories).toContain("arbitration");
   });
 
-  it("a must-not-match pattern re2js cannot read makes the rule find nothing, never too much", () => {
-    const rule = compileUnsigned({ id: "x", category: "ai_training", all: ["\\btrain\\b"], none: ["[[:alpha:]]"] }, known, { parse: false });
-    expect(rule.all.every((p) => p.test("we train models")) && !rule.none.some((p) => p.test("we train models"))).toBe(false);
+  it("an own rule with a pattern re2js cannot read is left out, never run", () => {
+    const merged = mergeRules(base, { disabled: [], own: [own({ id: "own-unreadable", all: ["\\btrain\\b"], none: ["[[:foo:]]"] })] });
+    expect(merged.skipped).toEqual(["own-unreadable"]);
+    expect(merged.rules.map((r) => r.id)).not.toContain("own-unreadable");
   });
 
   it("refuses an import with a non-rule entry or an empty example", () => {

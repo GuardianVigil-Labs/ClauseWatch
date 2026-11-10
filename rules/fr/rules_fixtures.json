@@ -2,26 +2,33 @@
   "fixtures": {
     "fr-data-sale": {
       "match": [
-        "Nous pouvons vendre vos données personnelles à nos partenaires avec votre consentement explicite."
+        "Nous pouvons vendre vos données personnelles à nos partenaires avec votre consentement explicite.",
+        "Nous pouvons vendre vos données personnelles à nos partenaires si vous ne vous y opposez pas."
       ],
       "noMatch": [
-        "Nous ne vendons jamais vos données personnelles à nos partenaires commerciaux."
+        "Nous ne vendons jamais vos données personnelles à nos partenaires commerciaux.",
+        "Il est faux de dire que nous vendons vos données personnelles, car nous ne les vendons jamais."
       ]
     },
     "fr-renewal": {
       "match": [
-        "Votre abonnement sera renouvelé automatiquement chaque mois jusqu’à votre demande de résiliation."
+        "Votre abonnement sera renouvelé automatiquement chaque mois jusqu’à votre demande de résiliation.",
+        "Votre abonnement sera renouvelé automatiquement si vous n’annulez pas avant l’échéance du contrat.",
+        "Votre abonnement sera renouvelé automatiquement chaque année, à moins que vous ne le résiliiez avant l’échéance."
       ],
       "noMatch": [
-        "Votre abonnement ne sera pas renouvelé automatiquement à la fin du contrat."
+        "Votre abonnement ne sera pas renouvelé automatiquement à la fin du contrat.",
+        "Votre forfait ne se renouvelle jamais automatiquement à la fin de la période choisie."
       ]
     },
     "fr-arbitration": {
       "match": [
-        "Tous les litiges seront soumis à un arbitrage obligatoire conformément au présent accord."
+        "Tous les litiges seront soumis à un arbitrage obligatoire conformément au présent accord.",
+        "Tous les litiges qui ne peuvent pas être réglés à l’amiable seront soumis à un arbitrage obligatoire."
       ],
       "noMatch": [
-        "Les litiges ne nécessitent pas un arbitrage obligatoire et restent soumis aux tribunaux."
+        "Les litiges ne nécessitent pas un arbitrage obligatoire et restent soumis aux tribunaux.",
+        "Les litiges ne seront pas soumis à un arbitrage obligatoire et restent devant les tribunaux."
       ]
     }
   }

@@ -8,6 +8,8 @@ import { BUNDLED } from "../src/engine/bundled";
 import { readDocument } from "../src/engine/documents";
 import { diagnostics, reportText, compareClauses, reportTools, versionDocuments } from "../src/ui/report-tools";
 import { readSelection } from "../src/engine/documents";
+import { mergeRules, type OwnRule } from "../src/engine/rule-set";
+import { languageRules, TRANSLATES } from "../src/engine/language-packs";
 import { reportCards } from "../src/ui/report";
 import { applyVersionEdit, cleanSaved } from "../src/storage-retention";
 
@@ -27,6 +29,28 @@ describe("localized rule packs",()=>{
     expect(result.status).toBe("read");if(result.status!=="read")return;
     expect(result.coverage?.status).toBe("supported");expect(result.categories.map((c)=>c.category).sort()).toEqual(["arbitration","auto_renewal","data_sale"]);
     expect(result.categories.find((c)=>c.category==="data_sale")?.status).toBe("found");
+  });
+  it("applies the person's switched-off rules and own rules to language packs",()=>{
+    const esPage=(p:string)=>`<html lang="es"><h1>Política de privacidad</h1><p>Esta política explica cómo recopilamos, usamos y compartimos sus datos personales cuando utiliza nuestro servicio y sus funciones.</p><p>${p}</p></html>`;
+    const sale="Podemos vender sus datos personales a nuestros socios comerciales con su consentimiento.";
+    const off=mergeRules(base,{disabled:["sells-personal-data"],own:[]});
+    const read=(rules:typeof base,html:string,lang="es")=>{const r=readDocument("privacy","https://policy.example/es",html,"text/html",rules,{language:lang});if(r.status!=="read")throw new Error(r.status);return r;};
+    const offResult=read(off,esPage(sale));
+    expect(offResult.coverage?.confident).toBe(true);
+    expect(offResult.categories.map((c)=>c.category)).not.toContain("data_sale");
+    expect(read(base,esPage(sale)).categories.find((c)=>c.category==="data_sale")?.status).toBe("found");
+    const own:OwnRule={id:"own-cookies-x",title:"Cookies",category:"ad_sharing",all:["galletas de terceros"],none:[],examples:{match:[],noMatch:[]}};
+    const withOwn=read(mergeRules(base,{disabled:[],own:[own]}),esPage("Utilizamos galletas de terceros para mostrarle anuncios personalizados en otros sitios."));
+    expect(withOwn.categories.find((c)=>c.category==="ad_sharing")?.status).toBe("found");
+    const ownOff=read(mergeRules(base,{disabled:["own-cookies-x"],own:[own]}),esPage("Utilizamos galletas de terceros para mostrarle anuncios personalizados en otros sitios."));
+    expect(ownOff.categories.map((c)=>c.category)).not.toContain("ad_sharing");
+    // A guessed language runs English plus the pack: the switch still holds for both.
+    const guess=languageRules({language:"fr",confident:false},mergeRules(base,{disabled:["binding-arbitration"],own:[]}));
+    expect(guess.rules.map((r)=>r.id)).not.toContain("fr-arbitration");
+    expect(guess.rules.map((r)=>r.id)).not.toContain("binding-arbitration");
+  });
+  it("maps every pack rule to an English rule of the same topic",()=>{
+    for(const file of [es,fr])for(const r of file.rules)expect(base.rules.find((x)=>x.id===TRANSLATES[r.id])?.category,r.id).toBe(r.category);
   });
   it("recognizes French terms",()=>expect(readDocument("terms","",'<html lang="fr"><h1>Conditions générales</h1><p>Votre abonnement sera renouvelé automatiquement chaque mois jusqu’à votre demande de résiliation.</p></html>',"text/html",base).status).toBe("read"));
 });
