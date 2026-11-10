@@ -6,6 +6,10 @@ All notable changes to ClauseWatch. Versions follow [semantic versioning](https:
 
 These changes describe the source checkout and are not a published release.
 
+### Releases
+
+- Attest each extension release's store ZIPs with signed build provenance, attached to the GitHub release, and submit the packages from version tags to the Chrome Web Store, Microsoft Edge Add-ons and Firefox Add-ons after approval in a protected environment. Opera packages are uploaded by hand.
+
 ### Reading and scan reliability
 
 - Run link, This site and menu scans as independent recoverable jobs with immutable targets, progress, cancellation, retry and a persistent-tab launcher.

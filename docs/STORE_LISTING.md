@@ -1,6 +1,6 @@
 # Store listing and disclosures
 
-Draft text for the current source checkout. Before submitting a release, verify it against the packaged version, the [privacy policy](PRIVACY.md) and [browser checklist](browser-checklist.md). Updating this file does not publish a store listing or privacy website.
+Draft text for the current source checkout. Before submitting a release, verify it against the packaged version, the [privacy policy](PRIVACY.md) and [browser checklist](browser-checklist.md). Updating this file does not publish a store listing or privacy website. The release workflow uploads packages to the stores ([releasing](releasing.md#store-submission)); listing text, screenshots and disclosure fields are still updated by hand in each store's dashboard.
 
 ## Single purpose
 

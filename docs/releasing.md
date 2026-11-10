@@ -39,9 +39,56 @@ Passing automated checks does not mean native permission prompts, a real AI prov
 4. Inspect artifact contents. Required licences and notices must ship; logs, private files, internal links and environment metadata must not. Confirm the build has the expected optional/required permissions and the intended English and bundled language-pack versions.
 5. Unpack the Chromium package and run `SMOKE_EXT=<unpacked-directory> npm run smoke`. Use a directory appropriate to your own environment; do not copy its local path into public evidence. Edge can use `SMOKE_CHANNEL=msedge` where installed.
 6. Load both packaged targets, work through [the browser checklist](browser-checklist.md), and have a maintainer use the packaged build. Validate manual permission grants/revocation, PDF/visible-page fallbacks, optional storage/deletion, exports, printing, highlighting and AI settings. Simulated-provider smoke tests are not live-provider validation.
-7. After approval, an authorized maintainer creates and pushes the matching extension version tag. The release workflow validates it, packages the extension and publishes the GitHub release. The publishing job has write permission; check/build jobs do not.
+7. After approval, an authorized maintainer creates and pushes the matching extension version tag. The release workflow validates it, packages the extension, attests the store ZIPs and publishes the GitHub release. The publishing job has write permission; check/build jobs do not.
 8. **Do not mark an extension release Latest.** Installed extensions request `releases/latest/download/rules.signed.json`; Latest must remain a published signed English-rule/known-site release.
-9. Submit the reviewed packages to the relevant stores. Reconcile disclosure fields, [listing text](https://github.com/GuardianVigil-Labs/ClauseWatch/blob/main/docs/STORE_LISTING.md), screenshots and the public privacy website with the submitted version. Repository edits do not update those external surfaces automatically.
+9. Approve the workflow's `stores` job when GitHub asks (see [Store submission](#store-submission)). It submits the exact packages from the release to the Chrome Web Store, Microsoft Edge Add-ons and Firefox Add-ons. Upload the Chromium ZIP to Opera Add-ons by hand from the GitHub release: Opera has no public upload API.
+10. Reconcile disclosure fields, [listing text](https://github.com/GuardianVigil-Labs/ClauseWatch/blob/main/docs/STORE_LISTING.md), screenshots and the public privacy website with the submitted version in each store's dashboard. The workflow uploads packages only; repository edits do not update those external surfaces.
+
+## Provenance
+
+Each extension release carries `attestation.sigstore.json`, a signed [SLSA build provenance](https://slsa.dev/spec/v1.0/provenance) attestation for its ZIPs, also recorded in the repository's attestations. To check a downloaded package:
+
+```sh
+gh attestation verify clausewatch-1.0.1-chrome.zip --repo GuardianVigil-Labs/ClauseWatch
+# offline, with the release's bundle:
+gh attestation verify clausewatch-1.0.1-chrome.zip --repo GuardianVigil-Labs/ClauseWatch --bundle attestation.sigstore.json
+```
+
+`SHA256SUMS` lists the same files' checksums.
+
+## Store submission
+
+After the GitHub release is created, the `stores` job of the release workflow runs in the `browser-stores` environment. It never rebuilds: it downloads the packages built earlier in the same run, checks them against `SHA256SUMS`, and submits them. Each store is a separate matrix entry, so the run shows which store failed and a failed store can be re-run on its own with **Re-run failed jobs**. A store whose secrets are missing fails with the names of the missing secrets; tokens are masked and never printed.
+
+| Store | Package | How |
+|---|---|---|
+| Chrome Web Store | `clausewatch-<version>-chrome.zip` | Chrome Web Store API v2: upload to the existing item, then publish (submits for review; publishes on approval). |
+| Microsoft Edge Add-ons | `clausewatch-<version>-chrome.zip` | Edge Add-ons API v1.1 (API key): upload to the draft, then publish, polling each operation for up to 20 minutes. |
+| Firefox Add-ons | `clausewatch-<version>-firefox.zip` and `-sources.zip` | `web-ext sign --channel listed` (an exact pinned version): a new listed version with the source code Mozilla's reviewers rebuild from. It does not wait for review. |
+| Opera Add-ons | `clausewatch-<version>-chrome.zip` | By hand in the Opera developer dashboard. |
+
+Pre-release tags (containing `-`, such as `v1.1.0-rc.1`) skip store submission. Each store reviews submissions on its own schedule; follow the review in its dashboard.
+
+### One-time setup
+
+Create a GitHub environment named `browser-stores` (**Settings → Environments**), add required reviewers, and limit its deployments to `v*` tags. Store the credentials below only as secrets of that environment, never as repository or organisation secrets. The first version of each listing is created by hand in the store's dashboard; the workflow only updates existing listings.
+
+**Chrome Web Store**
+
+1. In a Google Cloud project, enable the **Chrome Web Store API**.
+2. Configure the OAuth consent screen, then create an OAuth client ID of type **Web application** with `https://developers.google.com/oauthplayground` as an authorised redirect URI.
+3. In the [OAuth 2.0 Playground](https://developers.google.com/oauthplayground), choose **Use your own OAuth credentials**, authorise the scope `https://www.googleapis.com/auth/chromewebstore` with the account that publishes the item, and exchange the code for a refresh token. Publish the consent screen to production so the refresh token does not expire after seven days.
+4. Secrets: `CHROME_PUBLISHER_ID` (Developer Dashboard → **Publisher → Settings**), `CHROME_EXTENSION_ID` (the item's ID), `CHROME_CLIENT_ID`, `CHROME_CLIENT_SECRET` and `CHROME_REFRESH_TOKEN`.
+
+**Microsoft Edge Add-ons**
+
+1. In Partner Center, open **Microsoft Edge → Publish API**, enable the new experience (API keys), and select **Create API credentials**.
+2. Secrets: `EDGE_PRODUCT_ID` (the extension's **Product ID**, under **Extension identity** on its overview page), `EDGE_CLIENT_ID` and `EDGE_API_KEY`. API keys expire: renew the key on the same page before its expiry date and replace the secret.
+
+**Firefox Add-ons**
+
+1. Sign in to addons.mozilla.org with an account that is a developer of the add-on, and open **Developer Hub → Manage API Keys** to generate credentials.
+2. Secrets: `AMO_JWT_ISSUER` (the JWT issuer) and `AMO_JWT_SECRET` (the JWT secret).
 
 ## English rules and known sites
 
