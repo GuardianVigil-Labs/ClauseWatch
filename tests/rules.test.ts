@@ -27,6 +27,7 @@ describe("bundled rules (parity with the published fixtures)", () => {
     ["an unknown category", { rules: [{ id: "x", category: "b", all: ["x"], none: [] }] }],
     ["a duplicate id", { rules: [{ id: "x", category: "a", all: ["x"], none: [] }, { id: "x", category: "a", all: ["y"], none: [] }] }],
     ["a rule with no pattern", { rules: [{ id: "x", category: "a", all: [], none: [] }] }],
+    ["an unknown scope", { rules: [{ id: "x", category: "a", all: ["x"], none: [], scope: "unknown" }] }],
     ["other flags", { flags: "is", rules: [{ id: "x", category: "a", all: ["x"], none: [] }] }],
   ])("refuses a rules file with %s", (_label, partial) => {
     expect(() => compileRules({ version: 1, flags: "i", minQuoteWords: 8, categories: ["a"], ...partial } as RulesFile)).toThrow();

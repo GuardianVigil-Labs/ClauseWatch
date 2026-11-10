@@ -6,6 +6,7 @@
 // On a known site's sign-up page (rules/sites.json) the card shows when the
 // page opens, form or not. It never reads what is typed, and never blocks a page.
 
+import { captureRenderedPage } from "../src/engine/rendered";
 import { BUNDLED } from "../src/engine/bundled";
 import { compileRules } from "../src/engine/rules";
 import { loadRules } from "../src/engine/rule-set";
@@ -13,9 +14,9 @@ import { currentRulesFile } from "../src/engine/rules-update";
 import { kv } from "../src/storage";
 import { discoverLinks, kindsOfPage, KINDS, readDocument, type DocumentResult, type Kind } from "../src/engine/documents";
 import { readFirst } from "../src/ui/scan";
-import type { Fetched } from "../src/auto/background";
+import { completeDocs, type Fetched } from "../src/auto/background";
 import { inPlaceKinds, isSignupPage, knownSite, type KnownSite } from "../src/engine/known-sites";
-import { findSignupForms, siteOf, type SignupForm } from "../src/auto/detect";
+import { findSignupForms, signupRoots, siteOf, type SignupForm } from "../src/auto/detect";
 import { fillReport } from "../src/ui/report";
 import { isMuted, mute, shouldShowCard } from "../src/ui/sites";
 
@@ -25,41 +26,73 @@ export default defineContentScript({
   matches: ["https://*/*", "http://*/*"],
   registration: "runtime",
   runAt: "document_idle",
+  allFrames: true,
   async main() {
     // A newer signed update when one is stored and still verifies, with the
     // person's choices and own rules; its known sites too.
-    const fileP = currentRulesFile(kv, BUNDLED);
+    const fileP = currentRulesFile(kv, BUNDLED).catch(() => BUNDLED);
     let rulesP: ReturnType<typeof loadRules> | null = null;
     // Put together only when a page's documents are read, never on pages that read nothing.
     const ruleSet = () => (rulesP ??= fileP.then((f) => loadRules(kv, compileRules(f))));
     const site = siteOf(location.href);
-    const handled = new WeakSet<HTMLElement>();
-    let card: { host: HTMLElement; body: HTMLElement } | null = null;
+    let handled = new WeakSet<HTMLElement>();
+    let card: { host: HTMLElement; body: HTMLElement; dispose: () => void } | null = null;
     let docs: DocumentResult[] = [];
     let started: Promise<void> | null = null;
-    const start = () => (started ??= onStart());
+    let active = false;
+    let generation = 0;
+    let dismissed = false;
+    let completed = false;
+    let route = location.href;
+    let lifecycle = new AbortController();
+    const observers = new Map<Document | ShadowRoot, MutationObserver>();
+    let timer: number | undefined;
+    let poll: ReturnType<typeof setInterval> | undefined;
+    const valid = (epoch: number) => active && epoch === generation;
+    function start(): Promise<void> | undefined {
+      if (active && location.href !== route) navigate();
+      if (!active || dismissed || completed) return;
+      if (started) return started;
+      const epoch = generation;
+      const attempt = onStart(epoch).catch(() => {
+        if (!valid(epoch) || dismissed) return;
+        rulesP = null;
+        docs = KINDS.map((kind) => ({ kind, status: "could_not_read", reason: "Automatic reading could not finish. Try again, or open the policy in a tab and use This site." }));
+        render();
+      }).finally(() => { if (started === attempt) started = null; });
+      started = attempt;
+      return attempt;
+    }
 
     const send = <T>(message: unknown) => browser.runtime.sendMessage(message) as Promise<T>;
 
     /** Remembered documents, and the rules they were read with (or must be put back with). */
     type Remembered = { documents: DocumentResult[] | null; key: string } | null;
-    async function readDocuments(remembered: Remembered, known: KnownSite | null): Promise<DocumentResult[]> {
-      if (remembered?.documents) return remembered.documents;
+    async function readDocuments(remembered: Remembered, known: KnownSite | null, epoch: number): Promise<DocumentResult[]> {
       const rules = await ruleSet();
-      const html = document.documentElement.outerHTML;
+      if (!valid(epoch)) return [];
+      const snapshot = captureRenderedPage();
+      if (snapshot.truncated) return [{ kind: "terms", status: "could_not_read", reason: "This page is too large to read completely. Open the policy itself in a tab." }];
+      const html = snapshot.html;
       // On a known site, its listed documents are read, unless this page is one.
       const here = inPlaceKinds(kindsOfPage(html), known, location.href);
-      const out: DocumentResult[] = here.map((k) => readDocument(k, location.href, html, "text/html", rules));
+      const out: DocumentResult[] = (remembered?.documents ?? []).filter((d) => d.status === "read");
+      for (const k of here) if (!out.some((d) => d.kind === k)) out.push(readDocument(k, location.href, html, "text/html", rules, { rendered: true }));
       const found = discoverLinks(html, location.href);
-      for (const kind of KINDS.filter((k: Kind) => !here.includes(k))) {
+      for (const kind of KINDS.filter((k: Kind) => !out.some((d) => d.kind === k))) {
+        if (!valid(epoch)) return [];
         // A known site's own documents first, then the links on the page.
         const links = [...new Set([...(known ? [known[kind]] : []), ...found[kind]])];
-        out.push(await readFirst(kind, links, MAX_TRIES_PER_KIND, rules, (url) => send<Fetched>({ type: "fetch-text", url })));
+        try {
+          out.push(await readFirst(kind, links, MAX_TRIES_PER_KIND, rules, (url) => valid(epoch) ? send<Fetched>({ type: "fetch-text", url }) : Promise.resolve({ ok: false, reason: "Automatic reading stopped." })));
+        } catch {
+          out.push({ kind, status: "could_not_read", reason: "Automatic reading could not finish. Try again, or open the policy in a tab and use This site." });
+        }
       }
       // A read that found nothing at all is not kept: next time it is tried again,
       // and the site does not go quiet on the strength of it.
       // Put back under the key it was asked with: refused if the rules changed meanwhile.
-      if (remembered && out.some((d) => d.status === "read")) void send({ type: "docs:put", site, documents: out, key: remembered.key });
+      if (valid(epoch) && remembered && out.some((d) => d.status === "read")) void send({ type: "docs:put", site, documents: out, key: remembered.key }).catch(() => undefined);
       return out;
     }
 
@@ -82,7 +115,7 @@ export default defineContentScript({
       }
     }
 
-    function showCard(): { host: HTMLElement; body: HTMLElement } {
+    function showCard(): NonNullable<typeof card> {
       if (card) return card;
       const host = document.createElement("div");
       host.setAttribute("popover", "manual");
@@ -115,6 +148,8 @@ export default defineContentScript({
       // Closed means gone: a later card is a fresh one, never a detached one.
       close.addEventListener("click", (e) => {
         if (!e.isTrusted) return;
+        dismissed = true;
+        card?.dispose();
         card = null; // first, so the guard lets it go
         host.remove();
       });
@@ -154,7 +189,7 @@ export default defineContentScript({
       guard.observe(document.documentElement, { childList: true });
       guard.observe(host, { attributes: true, attributeFilter: ["style", "popover", "hidden", "class", "inert"] });
       guard.observe(document, { childList: true }); // the root itself replaced
-      card = { host, body };
+      card = { host, body, dispose: () => { guard.disconnect(); clearInterval(keep); } };
       return card;
     }
 
@@ -175,28 +210,36 @@ export default defineContentScript({
       return svg;
     }
 
-    async function onStart() {
+    async function onStart(epoch: number) {
       // A site muted, or checked recently, stays quiet.
       const [muted, cached, file] = await Promise.all([
         isMuted(kv, site).catch(() => false),
         send<Remembered>({ type: "docs:get", site }).catch(() => null),
         fileP.catch(() => BUNDLED),
       ]);
-      if (!shouldShowCard({ muted, checkedRecently: !!cached?.documents })) {
+      if (!valid(epoch) || dismissed) return;
+      if (!shouldShowCard({ muted, checkedRecently: completeDocs(cached?.documents) })) {
+        completed = true;
         if (!muted) void send({ type: "badge" });
         return;
       }
-      showCard();
+      showCard().body.textContent = "Reading this site's terms…";
+      let result: DocumentResult[];
       try {
-        docs = await readDocuments(cached, knownSite(file.sites ?? [], location.hostname));
+        result = await readDocuments(cached, knownSite(file.sites ?? [], location.hostname), epoch);
       } catch {
-        docs = [];
+        rulesP = null;
+        result = KINDS.map((kind) => ({ kind, status: "could_not_read", reason: "Automatic reading could not finish. Try again, or open the policy in a tab and use This site." }));
       }
+      if (!valid(epoch) || dismissed) return;
+      docs = result;
+      completed = completeDocs(docs);
       render();
     }
 
     /** The card's content: the quotes, and the way to quiet this site. */
     function render() {
+      if (!active || dismissed) return;
       const c = showCard();
       // A plain element with a closed shadow root: content scripts have no custom elements.
       const report = document.createElement("div");
@@ -209,11 +252,15 @@ export default defineContentScript({
       quiet.addEventListener("click", (e) => {
         if (!e.isTrusted) return;
         void mute(kv, site).then(() => {
+          dismissed = true;
+          card?.dispose();
           card = null;
           c.host.remove();
         });
       });
-      c.body.replaceChildren(...(docs.length ? [report] : []), disclaimer, quiet);
+      const retry = button("Try again");
+      retry.addEventListener("click", (e) => { if (e.isTrusted) void start(); });
+      c.body.replaceChildren(...(docs.length ? [report] : []), ...(!completeDocs(docs) ? [retry] : []), disclaimer, quiet);
     }
 
     function button(text: string, primary = false): HTMLButtonElement {
@@ -227,26 +274,100 @@ export default defineContentScript({
       return b;
     }
 
-    function watch(form: SignupForm) {
+    function watch(form: SignupForm, scope: Document | ShadowRoot) {
       if (handled.has(form.root)) return;
       handled.add(form.root);
       // When the person starts filling the form in.
-      form.root.addEventListener("focusin", () => void start(), { once: true });
+      form.root.addEventListener("focusin", () => {
+        if (findSignupForms(scope).some((f) => f.root === form.root)) void start();
+      }, { signal: lifecycle.signal });
+      const root = form.root.getRootNode();
+      if (form.root.contains(document.activeElement) || root instanceof ShadowRoot && form.root.contains(root.activeElement)) void start();
     }
 
     // A known site's sign-up page shows its card when it opens, sign-up form or not:
     // many sign up with a single button, which no form check can see.
-    void fileP.then((f) => {
+    async function checkKnown() {
+      const epoch = generation;
+      const f = await fileP;
+      if (!valid(epoch)) return;
       const known = knownSite(f.sites ?? [], location.hostname);
       if (known && isSignupPage(known, location.href)) void start();
-    }).catch(() => undefined);
-
-    const scan = () => findSignupForms(document).forEach(watch);
-    scan();
-    let timer: number | undefined;
-    new MutationObserver(() => {
+    }
+    const schedule = () => {
       clearTimeout(timer);
-      timer = window.setTimeout(scan, 500);
-    }).observe(document.documentElement, { childList: true, subtree: true });
+      timer = window.setTimeout(scan, 250);
+    };
+    function scan() {
+      if (!active) return;
+      const roots = signupRoots(document);
+      for (const [root, observer] of observers) if (root instanceof ShadowRoot && !root.host.isConnected) { observer.disconnect(); observers.delete(root); }
+      for (const root of roots) {
+        if (!observers.has(root)) {
+          const observer = new MutationObserver(schedule);
+          observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ["type", "name", "id", "autocomplete", "placeholder", "aria-label", "aria-labelledby", "form", "hidden", "aria-hidden", "inert", "class", "style"] });
+          observers.set(root, observer);
+        }
+        findSignupForms(root).forEach((form) => watch(form, root));
+      }
+    }
+    function navigate() {
+      if (!active || location.href === route) return;
+      route = location.href;
+      generation++;
+      started = null;
+      completed = dismissed = false;
+      card?.dispose(); card?.host.remove(); card = null;
+      docs = [];
+      scan();
+      for (const root of signupRoots(document)) {
+        if (findSignupForms(root).some((f) => f.root.contains(root.activeElement))) void start();
+      }
+      void checkKnown().catch(() => undefined);
+    }
+    function stop() {
+      active = false;
+      generation++;
+      lifecycle.abort();
+      for (const observer of observers.values()) observer.disconnect();
+      observers.clear();
+      clearTimeout(timer); clearInterval(poll);
+      card?.dispose(); card?.host.remove(); card = null;
+      handled = new WeakSet();
+      started = null;
+      completed = dismissed = false;
+      docs = [];
+      rulesP = null;
+    }
+    let syncingState = 0;
+    async function sync() {
+      const request = ++syncingState;
+      const on = await send<boolean>({ type: "auto:state" }).catch(() => false);
+      if (request !== syncingState) return;
+      if (!on) { stop(); return; }
+      if (active) return;
+      active = true;
+      lifecycle = new AbortController();
+      route = location.href;
+      window.addEventListener("popstate", navigate, { signal: lifecycle.signal });
+      window.addEventListener("hashchange", navigate, { signal: lifecycle.signal });
+      scan();
+      void checkKnown().catch(() => undefined);
+      // pushState/replaceState do not emit DOM events in an isolated script.
+      // Also discovers a shadow attached to an already-existing host.
+      poll = setInterval(() => { navigate(); scan(); }, 1000);
+    }
+    browser.storage.onChanged.addListener((changes, area) => {
+      if (area === "local" && "automatic" in changes) {
+        if (changes.automatic.newValue !== true) { syncingState++; stop(); }
+        else void sync();
+      }
+    });
+    browser.runtime.onMessage.addListener((message, sender) => {
+      if (sender.id === browser.runtime.id && message?.type === "auto:sync") void sync();
+    });
+    window.addEventListener("pagehide", () => { syncingState++; stop(); });
+    window.addEventListener("pageshow", () => void sync());
+    await sync();
   },
 });

@@ -3,21 +3,35 @@
 // menu. It reads no page and observes no browsing; pages reach it only as
 // messages from the extension's own pages and scripts, or a right-click.
 
+import { cleanSaved } from "../src/storage-retention";
 import { kv } from "../src/storage";
-import { AUTO_ORIGINS, cachedDocs, docsStale, fetchChosen, LOCAL_REASON, pageFetch, readKey, rememberIfCurrent } from "../src/auto/background";
+import { AUTO_ORIGINS, cachedDocs, docsStale, fetchChosen, LOCAL_REASON, pageFetch, pruneDocs, readKey, rememberIfCurrent } from "../src/auto/background";
 import { readSelection, type DocumentResult } from "../src/engine/documents";
 import { BUNDLED } from "../src/engine/bundled";
 import { compileRules } from "../src/engine/rules";
-import { loadRules } from "../src/engine/rule-set";
+import { applyRuleEdit, type RuleEdit, loadRules } from "../src/engine/rule-set";
 import { currentRulesFile, refreshRules } from "../src/engine/rules-update";
-import { asAddress, fetchTargets, freshPending, MAX_PASTED, PENDING_KEY, RESULT_KEY, scanOrigins, siteOf, type ScanResult } from "../src/ui/scan";
+import { asAddress, MAX_PASTED, scanOrigins, scanTargets, siteOf } from "../src/ui/scan";
+
+import { ScanJobs, FOCUS_KEY, JOB_PREFIX, newJob, type ScanPlan } from "../src/scan/jobs";
+import { jobStore, heldOrigins } from "../src/scan/client";
 
 const AUTO_SCRIPT = "clausewatch-signup";
+const automaticReads = new Set<AbortController>();
+const stopAutomaticReads = () => { for (const controller of automaticReads) controller.abort(); };
+const automaticAllowed = async () => (await kv.get("automatic")) === true && await browser.permissions.contains({ origins: AUTO_ORIGINS });
+async function notifyAutomatic(): Promise<void> {
+  const tabs = await browser.tabs.query({});
+  await Promise.all(tabs.map((tab) => tab.id === undefined ? undefined : browser.tabs.sendMessage(tab.id, { type: "auto:sync" }).catch(() => undefined)));
+}
+const cleanDocs = async () => { await pruneDocs(kv, await browser.storage.local.get(null)); await cleanSaved(kv); };
 const MENU_LINK = "clausewatch-link";
+let editingRules: Promise<unknown> = Promise.resolve();
+let editingVersions: Promise<unknown> = Promise.resolve();
 const MENU_SELECTION = "clausewatch-selection";
 
 /** What remembered documents are read with, this extension version included: an update reads sites afresh. */
-const docsKey = () => readKey(kv, browser.runtime.getManifest().version);
+const docsKey = () => readKey(kv, `${browser.runtime.getManifest().version}:rules-${BUNDLED.version}:packs-es-fr-1`);
 
 /** The known sites in use, kept at hand: the menu must ask for access without waiting (Firefox). */
 let knownSites = BUNDLED.sites ?? [];
@@ -38,74 +52,44 @@ function syncAutomatic(): Promise<void> {
 }
 
 async function syncAutomaticNow(): Promise<void> {
-  const on = (await kv.get("automatic")) === true && (await browser.permissions.contains({ origins: AUTO_ORIGINS }));
+  const on = await automaticAllowed();
   const registered = (await browser.scripting.getRegisteredContentScripts({ ids: [AUTO_SCRIPT] })).length > 0;
   if (on && !registered) {
-    await browser.scripting.registerContentScripts([{ id: AUTO_SCRIPT, matches: AUTO_ORIGINS, js: ["content-scripts/signup.js"], runAt: "document_idle" }]).catch(() => undefined);
+    await browser.scripting.registerContentScripts([{ id: AUTO_SCRIPT, matches: AUTO_ORIGINS, js: ["content-scripts/signup.js"], runAt: "document_idle", allFrames: true }]).catch(() => undefined);
+  } else if (on && registered) {
+    await browser.scripting.updateContentScripts([{ id: AUTO_SCRIPT, allFrames: true, js: ["content-scripts/signup.js"] }]);
   } else if (!on && registered) {
     await browser.scripting.unregisterContentScripts({ ids: [AUTO_SCRIPT] });
   }
+  if (!on) stopAutomaticReads();
+  await notifyAutomatic();
 }
 
 async function tick(): Promise<void> {
   await syncAutomatic().catch(() => undefined);
+  await cleanDocs().catch(() => undefined);
   // Daily at most; refreshRules keeps its own clock.
   await refreshRules(kv, BUNDLED).catch(() => undefined);
 }
 
-/** Session storage: the scan result waits there for the popup. */
-const showResult = (r: ScanResult & { running?: boolean }) => browser.storage.session.set({ [RESULT_KEY]: { ...r, at: Date.now() } });
-
-/** Opens the popup on the result, or a tab with it where the browser will not open the popup. */
-async function openResult(): Promise<void> {
-  try {
-    await browser.action.openPopup();
-  } catch {
-    await browser.tabs.create({ url: browser.runtime.getURL("/popup.html") }).catch(() => undefined);
-  }
+/** Opens results without consuming a shared storage slot. */
+async function openResult(id: string): Promise<void> {
+  await browser.storage.session.set({ [FOCUS_KEY]: id });
+  try { await browser.action.openPopup(); }
+  catch { await browser.tabs.create({ url: browser.runtime.getURL(`/popup.html?scan=${encodeURIComponent(id)}`) }).catch(() => undefined); }
 }
 
-/**
- * "Scan a link" and the link menu: the permission prompt closes the
- * popup, so the scan is saved first and, once its sites are allowed, it is
- * finished here. The result waits in session storage for the popup to show,
- * and the access is given back.
- */
-let finishing = false;
-type Finished = "done" | "busy" | "none" | "not-allowed";
-async function finishPendingScan(): Promise<Finished> {
-  // One at a time: a grant and the menu's own check can both ask.
-  if (finishing) return "busy";
-  finishing = true;
-  try {
-    return await finishPendingScanNow();
-  } finally {
-    finishing = false;
-  }
-}
-
-async function finishPendingScanNow(): Promise<Finished> {
-  const pending = freshPending((await browser.storage.session.get(PENDING_KEY))[PENDING_KEY]);
-  if (!pending) return "none";
-  const { sites } = await current();
-  // The sites asked for when the scan was saved; a later rules update cannot change what waits for a grant.
-  const origins = pending.origins ?? scanOrigins(pending.url, pending.kind, sites);
-  // Kept for a grant still to come (another permission may have been added meanwhile).
-  if (!(await browser.permissions.contains({ origins }))) return "not-allowed";
-  await browser.storage.session.remove(PENDING_KEY);
-  // A popup opened while this reads waits for it rather than missing it.
-  await showResult({ running: true, site: "", documents: [] });
-  try {
-    // Fetched here, read by the popup: a service worker cannot parse HTML.
-    await showResult(await fetchTargets(pending.url, pending.kind, sites, (u) => fetchChosen(u, sites)));
-  } catch {
-    await showResult({ site: siteOf(pending.url), documents: [{ kind: "terms", status: "could_not_read", url: pending.url, reason: "The address could not be read." }] });
-  } finally {
-    // Never while automatic mode holds access to every site: that access is not this scan's to give back.
-    if (!(await browser.permissions.contains({ origins: AUTO_ORIGINS }).catch(() => false))) await browser.permissions.remove({ origins }).catch(() => undefined);
-  }
-  return "done";
-}
+const scans = new ScanJobs({
+  store: jobStore,
+  allowed: (origins) => browser.permissions.contains({ origins }).catch(() => false),
+  release: async (origins) => {
+    if (!(await browser.permissions.contains({ origins: AUTO_ORIGINS }))) await browser.permissions.remove({ origins });
+  },
+  fetch: (url, sites, signal) => fetchChosen(url, sites, signal),
+  completed: (job) => openResult(job.id),
+});
+let ready: Promise<void> = Promise.resolve();
+const wakeScans = () => ready.then(async () => { await scans.expire(); await scans.wake(); }).catch(() => undefined);
 
 function createMenus(): void {
   void browser.contextMenus.removeAll().then(() => {
@@ -148,104 +132,150 @@ export default defineBackground(() => {
     void tick();
   });
   void current().catch(() => undefined);
+  void cleanDocs().catch(() => undefined);
+  // Pre-job versions stored a shared result that could retain downloaded HTML
+  // indefinitely. It has no current viewer: remove it from both storage areas.
+  ready = Promise.all([browser.storage.local.remove(["scanResult", "scanPending"]), browser.storage.session.remove(["scanResult", "scanPending"])]).then(() => scans.recover());
+  void wakeScans();
   browser.alarms.create("clausewatch-tick", { periodInMinutes: 15 });
   browser.alarms.onAlarm.addListener((a) => {
     if (a.name === "clausewatch-tick") void tick();
+    if (a.name === "clausewatch-scans") void wakeScans();
   });
+  browser.alarms.create("clausewatch-scans", { periodInMinutes: 1 });
   browser.storage.onChanged.addListener((changes, area) => {
+    if (area === "session" && Object.keys(changes).some((key) => key.startsWith(JOB_PREFIX))) void wakeScans();
     // Results remembered for quiet sites were read with the old rules: forget them when the rules change.
     if (area === "local" && docsStale(changes)) {
       void browser.storage.local.get(null).then((all) => browser.storage.local.remove(Object.keys(all).filter((k) => k.startsWith("docs:")))).catch(() => undefined);
     }
-    if (area === "local" && "automatic" in changes) void syncAutomatic();
+    if (area === "local" && "automatic" in changes) {
+      if (changes.automatic.newValue !== true) stopAutomaticReads();
+      void syncAutomatic();
+    }
     if (area === "local" && "rules:update" in changes) void current().catch(() => undefined);
   });
   browser.permissions.onAdded.addListener(() => {
     void syncAutomatic();
-    void finishPendingScan().then((done) => done === "done" && openResultIfMenu());
+    void wakeScans();
   });
-  browser.permissions.onRemoved.addListener(() => void syncAutomatic());
+  browser.permissions.onRemoved.addListener((removed) => {
+    if (removed.origins?.some((origin) => AUTO_ORIGINS.includes(origin) || origin === "<all_urls>")) stopAutomaticReads();
+    void syncAutomatic();
+  });
 
-  // A link scan started from the menu opens its result itself; one from the popup is shown there.
-  let fromMenu = false;
-  const openResultIfMenu = () => {
-    if (!fromMenu) return;
-    fromMenu = false;
-    void openResult();
-  };
-
-  // The right-click menu: the honest fallback where no link or known site is found.
+  // Permission requests start inside the browser's menu gesture (Firefox).
   browser.contextMenus.onClicked.addListener((info, tab) => {
     if (info.menuItemId === MENU_LINK && info.linkUrl && /^https?:\/\//.test(info.linkUrl)) {
       const url = info.linkUrl;
-      // A local or private address is never read: said in the result, nothing asked for.
+      const plan: ScanPlan = { site: URL.canParse(url) ? siteOf(url) : "Link", url, kind: "auto", targets: [], documents: [], sites: knownSites };
       if (!asAddress(url)) {
-        void showResult({ site: URL.canParse(url) ? new URL(url).hostname : "Link", documents: [{ kind: "terms", status: "could_not_read", reason: LOCAL_REASON }] });
-        void openResult();
+        const job = newJob(plan, [], [], "menu");
+        job.state = "complete";
+        job.result = { site: plan.site, documents: [{ kind: "terms", status: "could_not_read", reason: LOCAL_REASON }] };
+        void jobStore.put(job).then(() => openResult(job.id));
         return;
       }
-      // Asked inside the click: Firefox grants a request only while it handles the person's input.
-      // The scan is saved first: the background finishes it once the sites are allowed.
+      plan.targets = scanTargets(url, "auto", knownSites);
       const origins = scanOrigins(url, "auto", knownSites);
-      const saved = browser.storage.session.set({ [PENDING_KEY]: { url, kind: "auto", at: Date.now(), origins } });
-      fromMenu = true;
-      // Where the browser refuses to ask (no gesture it accepts), access already held still counts.
+      const before = heldOrigins(origins);
       const asked = browser.permissions.request({ origins }).catch(() => browser.permissions.contains({ origins }).catch(() => false));
       void (async () => {
-        const granted = await asked;
-        await saved;
-        if (!granted) {
-          fromMenu = false;
-          await browser.storage.session.remove(PENDING_KEY);
-          return;
-        }
-        // Already allowed: no permission was added, so it is finished here.
-        const done = await finishPendingScan();
-        if (done === "done") openResultIfMenu();
-        // Allowed, yet the scan cannot go on: say so rather than drop it.
-        else if (done === "not-allowed") {
-          fromMenu = false;
-          await browser.storage.session.remove(PENDING_KEY);
-          await showResult({ site: siteOf(url), documents: [{ kind: "terms", status: "could_not_read", url, reason: "ClauseWatch was not allowed to read every site this link needs." }] });
-          await openResult();
-        }
-      })();
+        const held = await before;
+        const job = newJob(plan, origins, origins.filter((o) => !held.includes(o)), "menu");
+        await jobStore.put(job);
+        if (!(await asked)) await scans.cancel(job.id);
+        await wakeScans();
+        if ((await jobStore.get(job.id))?.state === "cancelled") await openResult(job.id);
+      })().catch(() => undefined);
       return;
     }
     if (info.menuItemId === MENU_SELECTION) {
-      // The popup opens at once and waits for the result.
-      void showResult({ running: true, site: "", documents: [] });
-      void openResult();
       void (async () => {
         const { text, cut } = await selectedText(tab?.id, info.selectionText ?? "");
         const { rules } = await current();
         const page = info.pageUrl && /^https?:\/\//.test(info.pageUrl) ? info.pageUrl : "";
         const site = `${page ? `Selected text on ${siteOf(page)}` : "Selected text"}${cut ? " (its first 200,000 characters)" : ""}`;
-        await showResult({ site, documents: [readSelection(text, page, rules)] });
-      })();
+        const job = newJob({ site, url: page, kind: "terms", targets: [], documents: [], sites: [] }, [], [], "menu");
+        job.state = "complete";
+        job.result = { site, documents: [readSelection(text, page, rules)] };
+        await jobStore.put(job);
+        await openResult(job.id);
+      })().catch(() => undefined);
     }
   });
 
   browser.runtime.onMessage.addListener((message: unknown, sender) => {
     // Only the extension's own pages and content scripts.
     if (sender.id !== browser.runtime.id) return;
-    const m = message as { type?: string; key?: unknown; url?: unknown; site?: unknown; documents?: unknown };
+    const m = message as { type?: string; key?: unknown; url?: unknown; site?: unknown; documents?: unknown; id?: unknown; edit?: unknown };
+    if (m?.type === "auto:state") return automaticAllowed().catch(() => false);
     if (m?.type === "fetch-text" && typeof m.url === "string") {
       const url = m.url;
-      const tabUrl = sender.tab?.url;
-      return current().then(({ sites }) => pageFetch(url, tabUrl, sites));
+      // A frame reads its own site's policies, never its embedding tab's policies.
+      const tabUrl = sender.url;
+      return (async () => {
+        if (!(await automaticAllowed())) return { ok: false, reason: "Automatic mode is off or site access was removed." };
+        const controller = new AbortController();
+        automaticReads.add(controller);
+        try {
+          const { sites } = await current();
+          if (!(await automaticAllowed())) controller.abort();
+          return await pageFetch(url, tabUrl, sites, controller.signal);
+        } finally { automaticReads.delete(controller); }
+      })();
     }
-    const tabSite = sender.tab?.url ? new URL(sender.tab.url).hostname.replace(/^www\./, "") : null;
+    // Job control belongs to extension pages, not scripts injected into a website.
+    const extensionPage = sender.url?.startsWith(browser.runtime.getURL("/"));
+    if (extensionPage && m?.type === "versions:edit") {
+      const edit = m.edit as { type: string; generation?: number; versions?: { body: string; url: string; at: string; kind: string }[][] };
+      const apply = async () => {
+        if (!edit) return false;
+        const generation = Number(await kv.get("policyVersionsGeneration")) || 0;
+        if (edit.type === "enable" || edit.type === "clear") {
+          await kv.set("policyVersionsGeneration", generation + 1);
+          if (edit.type === "clear") await kv.remove("policyVersions");
+          await kv.set("policyVersionsEnabled", edit.type === "enable");
+          return true;
+        }
+        if (edit.type !== "write" || edit.generation !== generation || await kv.get("policyVersionsEnabled") !== true) return false;
+        const groups = edit.versions;
+        if (!Array.isArray(groups) || groups.length > 3 || !groups.every((g) => Array.isArray(g) && g.length <= 2 && g.every((v) => typeof v?.body === "string" && v.body.length <= 100000 && typeof v.url === "string" && /^https?:/.test(v.url) && URL.canParse(v.url) && ["terms", "privacy"].includes(v.kind) && Number.isFinite(Date.parse(v.at))))) return false;
+        await kv.set("policyVersions", groups);
+        return true;
+      };
+      editingVersions = editingVersions.then(apply, apply);
+      return editingVersions;
+    }
+    if (extensionPage && m?.type === "rules:edit") {
+      const edit = m.edit as RuleEdit;
+      const apply = async () => {
+        try {
+          const file = await currentRulesFile(kv, BUNDLED);
+          await applyRuleEdit(kv, compileRules(file), edit);
+          return { ok: true };
+        } catch (err) { return { ok: false, reason: err instanceof Error ? err.message : "The rules could not be saved." }; }
+      };
+      editingRules = editingRules.then(apply, apply);
+      return editingRules;
+    }
+    if (extensionPage && m?.type === "scan:wake") { void wakeScans(); return Promise.resolve(true); }
+    if (extensionPage && m?.type === "scan:cancel" && typeof m.id === "string") return ready.then(() => scans.cancel(m.id as string));
+    const tabSite = sender.tab && sender.url && URL.canParse(sender.url) && /^https?:/.test(sender.url) ? new URL(sender.url).hostname.replace(/^www\./, "") : null;
     // The key says what the documents are read with; a put whose key is no longer current is dropped.
-    if (m?.type === "docs:get" && tabSite && m.site === tabSite) return docsKey().then(async (key) => ({ key, documents: await cachedDocs(kv, tabSite, Date.now(), key) }));
+    if (m?.type === "docs:get" && tabSite && m.site === tabSite) return docsKey().then(async (key) => ({ key, documents: await automaticAllowed() ? await cachedDocs(kv, tabSite, Date.now(), key) : null }));
     if (m?.type === "docs:put" && tabSite && m.site === tabSite && Array.isArray(m.documents) && typeof m.key === "string") {
       const asked = m.key;
-      return docsKey().then((key) => rememberIfCurrent(kv, tabSite, m.documents as DocumentResult[], asked, key));
+      return docsKey().then(async (key) => await automaticAllowed() && rememberIfCurrent(kv, tabSite, m.documents as DocumentResult[], asked, key));
     }
     // A site checked recently stays quiet: a dot on the icon, not the card.
     if (m?.type === "badge" && sender.tab?.id !== undefined) {
-      void browser.action.setBadgeBackgroundColor({ tabId: sender.tab.id, color: "#2f80ff" }).catch(() => undefined);
-      return browser.action.setBadgeText({ tabId: sender.tab.id, text: "•" }).catch(() => undefined);
+      const tabId = sender.tab.id;
+      return automaticAllowed().then(async (on) => {
+        if (!on) return;
+        await browser.action.setBadgeBackgroundColor({ tabId, color: "#2f80ff" }).catch(() => undefined);
+        await browser.action.setBadgeText({ tabId, text: "•" }).catch(() => undefined);
+      });
     }
   });
 });

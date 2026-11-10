@@ -10,18 +10,22 @@ import { BUNDLED } from "../../src/engine/bundled";
 import { compileRules } from "../../src/engine/rules";
 import { loadRules } from "../../src/engine/rule-set";
 import { currentRulesFile } from "../../src/engine/rules-update";
-import { discoverLinks, kindsOfPage, KINDS, readDocument, type DocumentResult, type Kind } from "../../src/engine/documents";
+import { discoverLinks, sameSite, kindsOfPage, KINDS, readDocument, type DocumentResult, type Kind } from "../../src/engine/documents";
+import { captureRenderedPage, locatePolicyControl, type PageSnapshot } from "../../src/engine/rendered";
 import { ReportElement } from "../../src/ui/report";
 
 if (!customElements.get("cw-report")) customElements.define("cw-report", ReportElement);
 import { kv } from "../../src/storage";
-import { AUTO_ORIGINS, fetchChosen } from "../../src/auto/background";
+import { AUTO_ORIGINS, cachedDocs, readKey } from "../../src/auto/background";
 import { inPlaceKinds, knownSite, siteOrigins, type KnownSite } from "../../src/engine/known-sites";
 import {
-  asAddress, isOwnText, readFetched, recordRecent, readFirst, scanAddress as readAddress, scanOrigins, scanPasted, siteOf,
-  PENDING_KEY, PENDING_TTL_MS, RECENT_KEY, RESULT_KEY, type RecentSite, type ScanResult,
+  asAddress, isOwnText, readFetched, recordRecent, recentHistory, scanOrigins, scanTargets, scanPasted,
+  RECENT_KEY, type RecentSite, type ScanResult,
 } from "../../src/ui/scan";
-import { aiFindings, aiSummary, type AiSettings } from "../../src/ai/assist";
+import { FOCUS_KEY, JOB_PREFIX, JOB_TTL_MS, jobKey, type ScanJob, type ScanPlan } from "../../src/scan/jobs";
+import { jobStore, heldOrigins, requestScan, latestJob, activeJob } from "../../src/scan/client";
+import { reportTools } from "../../src/ui/report-tools";
+import { aiOffer } from "../../src/ui/ai";
 import { quoteText, SHARE_URL, shareTargets } from "../../src/ui/share";
 import { mutedSites } from "../../src/ui/sites";
 import { draftLetter, isOwnAddress, mailtoLink, privacyAddresses, type Law, type RequestKind } from "../../src/ui/requests";
@@ -31,12 +35,14 @@ import { draftLetter, isOwnAddress, mailtoLink, privacyAddresses, type Law, type
 const file = await currentRulesFile(kv, BUNDLED);
 const sites = file.sites ?? [];
 const rules = await loadRules(kv, compileRules(file));
+if (location.search) { document.body.style.width = "min(960px, 100vw)"; document.body.style.maxHeight = "none"; }
 const MAX_PAGE_BYTES = 2 * 1024 * 1024;
 const MAX_TRIES_PER_KIND = 4;
 // Each tab has its own panel, so neither can write over the other.
 const main = document.getElementById("main")!;
 const scanPanel = document.getElementById("scan")!;
 const scanOut = document.createElement("div");
+let pageGeneration = 0;
 
 function say(text: string, note = false, panel: HTMLElement = main) {
   const p = document.createElement("p");
@@ -61,105 +67,26 @@ const CATEGORY_NAMES: Record<string, string> = {
   termination: "account closed at the company's discretion",
 };
 
+const savedReportButton = document.createElement("button");
+savedReportButton.textContent = "Latest report";
+savedReportButton.onclick = async () => {
+  const generation = ++pageGeneration;
+  const saved = await kv.get("latestReport") as { site: string; documents: DocumentResult[]; version: number; at: number } | undefined;
+  if (generation !== pageGeneration) return;
+  siteStarted = true; selectTab("site");
+  if (!saved || Date.now()-saved.at >= 7*864e5) { await kv.remove("latestReport"); say("No saved report is available. Saved quotes expire after seven days.", true); return; }
+  show(saved.site, saved.documents, undefined, { final: false, savedVersion: saved.version });
+  main.append(el("p", `Saved ${new Date(saved.at).toLocaleString()}; rules version ${saved.version}. Full document bodies are not retained in this report.`, "note"));
+  const targets = saved.documents.filter((d) => d.url && asAddress(d.url)).map((d) => ({ url: d.url!, kind: d.kind }));
+  const origins = [...new Set(targets.map((t) => `${new URL(t.url).origin}/*`))];
+  const held = await heldOrigins(origins);
+  const again = el("button", "Check again");
+  again.onclick = () => { const next = requestScan({ site: saved.site, url: targets[0]!.url, kind: "auto", targets, documents: [], sites, explicitKind: true }, origins, held, "scan"); void next.saved.then(() => viewJob(next.job.id)); };
+  if (targets.length) main.append(again);
+};
+document.querySelector("header")!.append(savedReportButton);
+
 document.getElementById("settings-button")!.addEventListener("click", () => void browser.runtime.openOptionsPage());
-
-/** Optional AI help: only when the user turned it on, and only when asked. */
-async function aiOffer(documents: DocumentResult[], panel: HTMLElement) {
-  const settings = ((await kv.get("ai").catch(() => undefined)) as AiSettings | undefined) ?? { mode: "off" };
-  if (settings.mode === "off") return;
-  // Verified quotes only: the rules' findings, and AI findings once they pass the quote check.
-  const quotes = documents.flatMap((d) => (d.status === "read" ? d.categories.flatMap((c) => c.findings.map((f) => f.quote)) : []));
-  summaryOffer(settings, quotes, panel);
-  // Only documents whose text was read here; a remembered report carries quotes, not the text.
-  const read = documents.filter((d): d is DocumentResult & { status: "read" } => d.status === "read" && d.body.length > 0);
-  if (read.length === 0) return;
-  const box = document.createElement("div");
-  const button = document.createElement("button");
-  button.textContent = "Look for clauses the rules missed (AI)";
-  button.addEventListener("click", async () => {
-    button.disabled = true;
-    button.textContent = "Asking…";
-    const list = document.createElement("div");
-    for (const doc of read) {
-      try {
-        const found = await aiFindings(settings, doc, rules.categories, rules.minQuoteWords);
-        for (const f of found) {
-          quotes.push(f.quote);
-          const item = document.createElement("section");
-          item.className = "ai";
-          const head = document.createElement("p");
-          head.className = "ai-label";
-          head.textContent = `Found by AI (quoted) · ${CATEGORY_NAMES[f.category] ?? f.category}`;
-          const quote = document.createElement("blockquote");
-          quote.textContent = `“${f.quote}”`;
-          const why = document.createElement("p");
-          why.className = "note";
-          why.textContent = f.explanation;
-          item.append(head, quote, why);
-          list.append(item);
-        }
-      } catch (err) {
-        const p = document.createElement("p");
-        p.className = "note";
-        p.textContent = err instanceof Error ? err.message : "AI help could not answer.";
-        list.append(p);
-      }
-    }
-    if (!list.childElementCount) {
-      const p = document.createElement("p");
-      p.className = "note";
-      p.textContent = "AI found nothing more that it could quote exactly.";
-      list.append(p);
-    }
-    box.replaceChildren(list);
-  });
-  box.append(button);
-  panel.append(box);
-}
-
-/**
- * "Summarise the quotes (AI)": three or four sentences above the
- * report, labelled, each citing the quotes it rests on, never in their place.
- */
-function summaryOffer(settings: AiSettings, quotes: string[], panel: HTMLElement) {
-  const box = document.createElement("section");
-  box.className = "ai";
-  const button = document.createElement("button");
-  button.textContent = "Summarise the quotes (AI)";
-  button.addEventListener("click", async () => {
-    if (quotes.length === 0) {
-      box.replaceChildren(Object.assign(document.createElement("p"), { className: "note", textContent: "There are no quotes to summarise." }));
-      return;
-    }
-    button.disabled = true;
-    button.textContent = "Asking…";
-    const used = [...quotes];
-    try {
-      const sentences = await aiSummary(settings, used);
-      const head = Object.assign(document.createElement("p"), { className: "ai-label", textContent: "AI summary of the quotes below. Each sentence names its quotes, but AI can be wrong, or misled by the page: read the quotes, they are what the documents say." });
-      if (sentences.length === 0) {
-        box.replaceChildren(head, Object.assign(document.createElement("p"), { className: "note", textContent: "AI gave no summary that rests on the quotes." }));
-        return;
-      }
-      const list = document.createElement("ul");
-      for (const s of sentences) {
-        const li = document.createElement("li");
-        li.textContent = `${s.text} `;
-        const cite = document.createElement("span");
-        cite.className = "note";
-        cite.textContent = `(${s.quotes.map((n) => `“${used[n - 1]!.slice(0, 60)}${used[n - 1]!.length > 60 ? "…" : ""}”`).join("; ")})`;
-        li.append(cite);
-        list.append(li);
-      }
-      if (box.isConnected) box.replaceChildren(head, list);
-    } catch (err) {
-      box.replaceChildren(Object.assign(document.createElement("p"), { className: "note", textContent: err instanceof Error ? err.message : "AI help could not answer." }));
-    }
-  });
-  box.append(button);
-  // A later render may have replaced the panel while the lock was read.
-  if (panel.isConnected) panel.prepend(box);
-}
 
 async function remember(site: string, documents: DocumentResult[]) {
   const list = ((await kv.get(RECENT_KEY).catch(() => undefined)) as RecentSite[] | undefined) ?? [];
@@ -167,7 +94,7 @@ async function remember(site: string, documents: DocumentResult[]) {
 }
 
 /** A report into a panel. `final: false` is a first step whose reading continues, not yet remembered. */
-function show(site: string, documents: DocumentResult[], extra?: HTMLElement, { panel = main, final = true }: { panel?: HTMLElement; final?: boolean } = {}) {
+function show(site: string, documents: DocumentResult[], extra?: HTMLElement, { panel = main, final = true, savedVersion }: { panel?: HTMLElement; final?: boolean; savedVersion?: number } = {}) {
   const report = document.createElement("cw-report") as ReportElement;
   // Pasted or selected text: no site to remember, quote back or write to.
   const pasted = isOwnText(site);
@@ -187,8 +114,20 @@ function show(site: string, documents: DocumentResult[], extra?: HTMLElement, { 
   panel.replaceChildren(report, flash, ...(extra ? [extra] : []));
   if (final && !pasted && documents.some((d) => d.status === "read")) void remember(site, documents);
   panel.append(el("p", "Quotes from the documents, not legal advice.", "note"));
+  panel.append(reportTools(site, documents, { ...rules, version: savedVersion ?? rules.version }));
+  if (final && !pasted && documents.some((d) => d.status === "read")) {
+    const slim = documents.map((d) => d.status === "read" ? { ...d, body: "" } : d);
+    const saved = { site, documents: slim, version: rules.version, at: Date.now() };
+    if (JSON.stringify(saved).length <= 256000) void kv.set("latestReport", saved);
+    else void kv.remove("latestReport");
+  }
+  for (const d of documents) if (d.status === "could_not_read" && d.url && asAddress(d.url)) {
+    const open = el("button", `Open ${d.kind} policy and read this tab`, "secondary");
+    open.onclick = () => { void browser.tabs.create({ url: d.url }); flash.textContent = "Wait for the policy to load, sign in if needed, then open ClauseWatch on that tab and choose Read visible policy. This uses the page you can see without sending your cookies to a separate fetch."; };
+    panel.append(open);
+  }
   if (!pasted && final) panel.append(requestOffer(site, documents));
-  void aiOffer(documents, panel);
+  void aiOffer(documents, panel, rules);
 }
 
 /** Elsewhere: how ClauseWatch works, and what was checked here recently. */
@@ -216,7 +155,7 @@ async function guide(lead: string, site?: string) {
   step(3, "Checking another service? Use ", el("strong", "Scan a link"), ".");
   how.append(el("h2", "How ClauseWatch works"), steps);
   parts.push(intro, how);
-  const recent = ((await kv.get(RECENT_KEY).catch(() => undefined)) as RecentSite[] | undefined) ?? [];
+  const recent = recentHistory(((await kv.get(RECENT_KEY).catch(() => undefined)) as RecentSite[] | undefined) ?? []);
   if (recent.length) {
     const box = el("div", "", "box");
     const ul = el("ul", "", "recent");
@@ -236,79 +175,128 @@ async function guide(lead: string, site?: string) {
   main.replaceChildren(...parts);
 }
 
-async function currentPage(): Promise<{ url: string; html: string } | { error: string }> {
+async function currentPage(): Promise<(PageSnapshot & { tabId: number; pdf?: boolean }) | { error: string }> {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id || !tab.url || !/^https?:\/\//.test(tab.url)) return { error: "ClauseWatch reads web pages. Open a site's sign-up or terms page and click again." };
+  if (/\.pdf$/i.test(new URL(tab.url).pathname)) return { url: tab.url, tabId: tab.id, html: "", controls: [], truncated: false, pdf: true };
   try {
-    const [res] = await browser.scripting.executeScript({ target: { tabId: tab.id }, func: () => document.documentElement.outerHTML });
-    const html = typeof res?.result === "string" ? res.result : "";
-    if (!html) return { error: "This page could not be read." };
-    if (html.length > MAX_PAGE_BYTES) return { error: "This page is too large to read." };
-    return { url: tab.url, html };
+    const [res] = await browser.scripting.executeScript({ target: { tabId: tab.id }, func: captureRenderedPage });
+    const snapshot = res?.result;
+    if (!snapshot?.html) return { error: "This page could not be read." };
+    if (snapshot.truncated) return { error: "This page is too large to read completely. Open the policy itself or select its text." };
+    return { ...snapshot, tabId: tab.id };
   } catch {
-    return { error: "The browser does not let extensions read this page." };
+    return { error: "The browser does not let extensions read this page. Use Scan a link or paste its policy text." };
   }
 }
 
-async function readLinked(site: string, links: Record<Kind, string[]>, kinds: Kind[], known: KnownSite | null): Promise<DocumentResult[]> {
-  // A known site's documents may redirect between its domains: access to each.
-  const origins = [...new Set([...kinds.flatMap((k) => links[k].slice(0, MAX_TRIES_PER_KIND)).map((u) => `${new URL(u).origin}/*`), ...(known ? siteOrigins(known) : [])])];
-  // Asked during the user's click, for exactly these origins. A scan still
-  // waiting from Scan a link is abandoned, so this grant is never taken for it.
-  void browser.storage.session.remove(PENDING_KEY);
-  // Started with the request, inside the click (Firefox), so they see the access held before it.
-  const held = Promise.all(origins.map((o) => browser.permissions.contains({ origins: [o] }).catch(() => false)));
-  const granted = await browser.permissions.request({ origins });
-  const before = await held;
-  if (!granted) return kinds.map((kind) => ({ kind, status: "could_not_read", reason: `You did not allow ClauseWatch to read ${site}.` }));
-  try {
-    const out: DocumentResult[] = [];
-    // The same refusals as Scan a link: no local address, no redirect off the site.
-    for (const kind of kinds) out.push(await readFirst(kind, links[kind], MAX_TRIES_PER_KIND, rules, (u) => fetchChosen(u, sites)));
-    return out;
-  } finally {
-    // Access was for this click only: only what it newly gave is given back, never
-    // access held before (automatic mode's, say).
-    const added = origins.filter((_, i) => !before[i]);
-    if (added.length) await browser.permissions.remove({ origins: added }).catch(() => undefined);
+/** A manual fallback for client-rendered policies and documents with unfamiliar names. */
+function renderedOffer(page: PageSnapshot & { tabId: number }): HTMLElement {
+  const box = el("section", "", "box");
+  box.append(el("h2", "Read the visible page"), el("p", "If the policy is loaded on this page, choose its type. Common hidden elements are excluded; open any policy sections first.", "note"));
+  const kind = el("select");
+  kind.setAttribute("aria-label", "Visible document type");
+  for (const [value, label] of [["terms", "Terms of service"], ["privacy", "Privacy policy"]]) kind.append(Object.assign(el("option", label), { value }));
+  const read = el("button", "Read visible policy");
+  read.type = "button";
+  const status = el("p", "", "note");
+  read.addEventListener("click", async () => {
+    try {
+      const [res] = await browser.scripting.executeScript({ target: { tabId: page.tabId }, func: captureRenderedPage });
+      const snapshot = res?.result;
+      if (!snapshot || snapshot.truncated) { status.textContent = "The page could not be read completely. Select its policy text instead."; return; }
+      const site = new URL(snapshot.url).hostname.replace(/^www\./, "");
+      show(site, [readDocument(kind.value as Kind, snapshot.url, snapshot.html, "text/html", rules, { explicitKind: true, rendered: true })]);
+    } catch { status.textContent = "The browser could not read this tab. Open the policy and click ClauseWatch again."; }
+  });
+  box.append(kind, read, status);
+  for (const control of page.controls) {
+    if (!control.path.length) continue;
+    const open = el("button", `Find policy control: ${control.label}`, "secondary");
+    open.type = "button";
+    open.addEventListener("click", async () => {
+      try {
+        const [res] = await browser.scripting.executeScript({ target: { tabId: page.tabId }, func: locatePolicyControl, args: [control.path, control.label] });
+        status.textContent = res?.result ? "Policy control focused on the page. Open it there, wait for its text, then choose Read visible policy. If it opens another tab, open ClauseWatch there." : "This control changed. Use it on the page, then click ClauseWatch again.";
+      } catch { status.textContent = "Use this policy control on the page, then click ClauseWatch again."; }
+    });
+    box.append(open);
   }
+  return box;
 }
 
 async function run() {
+  const pageToken = ++pageGeneration;
   const page = await currentPage();
+  if (pageToken !== pageGeneration) return;
   if ("error" in page) return guide(page.error);
   const site = new URL(page.url).hostname.replace(/^www\./, "");
-
-  // A known site's own documents (rules/sites.json) first, then the links on the page.
+  if (page.pdf) {
+    const origins = [`${new URL(page.url).origin}/*`];
+    const held = await heldOrigins(origins);
+    say("Read this PDF on your device. Image-only and password-protected files need an accessible text version.");
+    const read = el("button", "Read this PDF");
+    read.addEventListener("click", () => {
+      const pending = requestScan({ site, url: page.url, kind: "auto", targets: [{ url: page.url, kind: "auto" }], sites, documents: [] }, origins, held, "site");
+      void pending.saved.then(() => viewJob(pending.job.id));
+    });
+    main.append(read);
+    return;
+  }
   const known = knownSite(sites, new URL(page.url).hostname);
   const here = inPlaceKinds(kindsOfPage(page.html), known, page.url);
-  const inPlace = here.map((kind) => readDocument(kind, page.url, page.html, "text/html", rules));
+  const inPlace = here.map((kind) => readDocument(kind, page.url, page.html, "text/html", rules, { rendered: true }));
   const found = discoverLinks(page.html, page.url);
+  const all = discoverLinks(page.html, page.url, { external: true });
   const links = Object.fromEntries(KINDS.map((k) => [k, [...new Set([...(known ? [known[k]] : []), ...found[k]])]])) as Record<Kind, string[]>;
   const missing = KINDS.filter((k) => !here.includes(k) && links[k].length > 0);
-  // A document neither on this page nor linked from it was not read, and the report says so.
-  const unread = (kinds: Kind[], reason: string): DocumentResult[] => kinds.map((kind) => ({ kind, status: "could_not_read", reason }));
-  const unlinked = unread(KINDS.filter((k) => !here.includes(k) && links[k].length === 0), "No link to it was found on this page.");
+  const external = KINDS.flatMap((kind) => all[kind].filter((url) => !sameSite(new URL(url).hostname, new URL(page.url).hostname) && !links[kind].includes(url)).slice(0, 10).map((url) => ({ kind, url })));
+  const unlinked: DocumentResult[] = KINDS.filter((k) => !here.includes(k) && !links[k].length).map((kind) => ({ kind, status: "could_not_read", reason: "No on-site link was found. Choose an external policy below, scan its address, or read the visible page." }));
+  const cached = inPlace.length ? null : await cachedDocs(kv, site, Date.now(), await readKey(kv, `${browser.runtime.getManifest().version}:rules-${BUNDLED.version}:packs-es-fr-1`));
+  if (pageToken !== pageGeneration) return;
+  if (inPlace.length) show(site, [...inPlace, ...unlinked]);
+  else if (cached?.some((d) => d.status === "read")) show(site, cached, undefined, { final: false });
+  else say(missing.length ? `${site} links to its policies. Allow access to read them.` : "No readable policy was recognised on this page. Choose a policy link, use its page control, or read the visible page below.");
 
-  if (inPlace.length === 0 && missing.length === 0) {
-    return guide(`No terms or privacy links were found on this page. Try ${site}'s home page or sign-up page.`, site);
+  const choices = el("fieldset");
+  choices.append(el("legend", "Policies on other sites (optional)"), el("p", "Select only the policy hosts you want to read. Your browser will ask for access to them for this scan.", "note"));
+  const selected = new Set<string>();
+  const read = el("button", missing.length ? `Read ${site}'s ${missing.map((k) => k === "terms" ? "terms" : "privacy policy").join(" and ")}` : "Read selected policies");
+  if (cached?.some((d) => d.status === "read") && missing.length) read.textContent = "Check again";
+  read.type = "button";
+  let prepared: { plan: ScanPlan; origins: string[]; held: string[] } | null = null;
+  let generation = 0;
+  const prepare = async () => {
+    const serial = ++generation;
+    prepared = null;
+    read.disabled = true;
+    const groups = KINDS.map((kind) => ({ kind, urls: [...external.filter((e) => e.kind === kind && selected.has(`${kind}:${e.url}`)).map((e) => e.url), ...(missing.includes(kind) ? links[kind].slice(0, MAX_TRIES_PER_KIND) : [])] })).filter((g) => g.urls.length);
+    if (!groups.length) return;
+    const targets = groups.flatMap((g) => g.urls.map((url) => ({ url, kind: g.kind })));
+    const origins = [...new Set([...targets.map((t) => `${new URL(t.url).origin}/*`), ...(known ? siteOrigins(known) : [])])];
+    const held = await heldOrigins(origins);
+    if (serial !== generation) return;
+    prepared = { plan: { site, url: page.url, kind: "auto", targets, groups, documents: [...inPlace, ...unlinked].filter((d) => !groups.some((g) => g.kind === d.kind)), sites }, origins, held };
+    read.disabled = false;
+  };
+  for (const candidate of external) {
+    const label = el("label");
+    const checkbox = el("input");
+    checkbox.type = "checkbox";
+    const key = `${candidate.kind}:${candidate.url}`;
+    checkbox.addEventListener("change", () => { if (checkbox.checked) selected.add(key); else selected.delete(key); void prepare(); });
+    label.append(checkbox, ` ${candidate.kind === "terms" ? "Terms" : "Privacy"}: ${candidate.url}`);
+    choices.append(label);
   }
-  if (missing.length === 0) return show(site, [...inPlace, ...unlinked]);
-
-  const button = document.createElement("button");
-  button.textContent = `Read ${site}'s ${missing.map((k) => (k === "terms" ? "terms" : "privacy policy")).join(" and ")}`;
-  button.addEventListener("click", async () => {
-    button.disabled = true;
-    button.textContent = "Reading…";
-    const fetched = await readLinked(site, links, missing, known);
-    show(site, [...inPlace, ...fetched, ...unlinked]);
+  read.addEventListener("click", () => {
+    if (!prepared) return;
+    const pending = requestScan(prepared.plan, prepared.origins, prepared.held, "site");
+    void pending.saved.then(() => viewJob(pending.job.id)).catch(() => say("The scan could not be saved. Try again.", true));
   });
-  if (inPlace.length) show(site, [...inPlace, ...unlinked, ...unread(missing, "Not read yet: use the button below.")], button, { final: false });
-  else {
-    const docs = missing.map((k) => (k === "terms" ? "terms of service" : "privacy policy")).join(" and ");
-    say(known ? `${known.name} is a known service: ClauseWatch knows where its ${docs} are, and will ask to read them once, for this click only.` : `${site} links to its ${docs}. ClauseWatch will ask to read ${site} once, for this click only.`);
-    main.append(button);
-  }
+  if (external.length) main.append(choices);
+  if (missing.length || external.length) main.append(read);
+  main.append(renderedOffer(page));
+  await prepare();
 }
 
 // --- Data requests ------------------------------------------------------
@@ -417,46 +405,6 @@ function showScan(r: ScanResult) {
   );
 }
 
-/** Waits for the background to store the scan it finished, up to a limit. */
-function waitForResult(ms: number): Promise<ScanResult | null> {
-  return new Promise((resolve) => {
-    const done = (r: ScanResult | null) => {
-      browser.storage.onChanged.removeListener(listener);
-      clearTimeout(timer);
-      resolve(r);
-    };
-    const listener = (changes: Record<string, { newValue?: unknown }>, area: string) => {
-      const r = changes[RESULT_KEY]?.newValue as (ScanResult & { running?: boolean }) | undefined;
-      if (area === "session" && r?.documents && !r.running) void browser.storage.session.remove(RESULT_KEY).then(() => done(r));
-    };
-    const timer = setTimeout(() => done(null), ms);
-    browser.storage.onChanged.addListener(listener);
-  });
-}
-
-async function scanAddress(url: URL, kind: Kind | "auto"): Promise<ScanResult | string> {
-  // A known site's own documents may be on another of its sites: access to each.
-  const origins = scanOrigins(url.href, kind, sites);
-  // All three start inside the click: Firefox accepts a permission request
-  // only while it handles the user's input, so nothing is awaited before it.
-  // The scan is saved first because the prompt may close the popup.
-  const had = browser.permissions.contains({ origins });
-  const saved = browser.storage.session.set({ [PENDING_KEY]: { url: url.href, kind, at: Date.now(), origins } });
-  const asked = browser.permissions.request({ origins });
-  const [already, , granted] = await Promise.all([had, saved, asked]);
-  if (!granted) {
-    await browser.storage.session.remove(PENDING_KEY);
-    return `You did not allow ClauseWatch to read ${siteOf(url.href)}.`;
-  }
-  if (already) {
-    // Allowed before (Automatic mode, say): read it here, and leave that access as it was.
-    await browser.storage.session.remove(PENDING_KEY);
-    return readAddress(url.href, kind, rules, sites, (u) => fetchChosen(u, sites));
-  }
-  // Newly allowed: the background finishes the scan and gives the access back.
-  return (await waitForResult(90_000)) ?? "Still reading. Open ClauseWatch again in a moment to see the result.";
-}
-
 let formBuilt = false;
 
 /** Built once: switching tabs keeps what was typed and the last result. */
@@ -508,8 +456,27 @@ async function scanForm() {
   });
   const note = document.createElement("p");
   note.className = "note";
-  note.textContent = "For a link, ClauseWatch asks once for permission to read that one site, and finishes the scan even if the permission prompt closes this window. For a known service, it reads that service's own terms and privacy policy.";
+  note.textContent = "Downloads and scan jobs expire after ten minutes; the latest saved quote report lasts seven days. For a link, ClauseWatch asks once for permission to read that one site, and finishes the scan even if the permission prompt closes this window. For a known service, it reads that service's own terms and privacy policy.";
   form.append(label, top, pasteRow, pasted, kind, note);
+  let prepared: { value: string; kind: Kind | "auto"; plan: ScanPlan; origins: string[]; held: string[] } | null = null;
+  let preparing = 0;
+  const prepare = async () => {
+    const generation = ++preparing;
+    prepared = null;
+    const value = addressField.value.trim();
+    const address = asAddress(value);
+    if (!address || !pasted.hidden) { go.disabled = false; return; }
+    go.disabled = true;
+    const k = kind.value as Kind | "auto";
+    const origins = scanOrigins(address.href, k, sites);
+    const held = await heldOrigins(origins);
+    if (generation !== preparing) return;
+    prepared = { value, kind: k, origins, held, plan: { site: address.hostname.replace(/^www\./, ""), url: address.href, kind: k, targets: scanTargets(address.href, k, sites), documents: [], sites, explicitKind: k !== "auto" } };
+    go.disabled = false;
+  };
+  addressField.addEventListener("input", () => void prepare());
+  kind.addEventListener("change", () => void prepare());
+  paste.addEventListener("click", () => void prepare());
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const value = (pasted.hidden ? addressField.value : input.value).trim();
@@ -521,8 +488,12 @@ async function scanForm() {
     try {
       if (!address && pasted.hidden) return say("Enter a web address, or choose Paste terms text instead.", true, scanOut);
       if (!address) return showScan(scanPasted(value, k, rules));
-      const r = await scanAddress(address, k);
-      return typeof r === "string" ? say(r, true, scanOut) : showScan(r);
+      if (!prepared || prepared.value !== value || prepared.kind !== k) { void prepare(); return say("Preparing access to this address. Press Scan again in a moment.", true, scanOut); }
+      // No await before this call: the browser receives the request in the submit gesture.
+      const pending = requestScan(prepared.plan, prepared.origins, prepared.held, "scan");
+      prepared = null;
+      await pending.saved;
+      await viewJob(pending.job.id);
     } catch {
       say("Something went wrong reading that.", true, scanOut);
     } finally {
@@ -530,24 +501,88 @@ async function scanForm() {
       go.textContent = "Scan";
     }
   });
-  scanPanel.replaceChildren(form, scanOut);
+  scanPanel.replaceChildren(keepOpen, form, jobList, scanOut);
+  void renderJobList();
 }
 
-/** A scan the background finished, or is still reading, while the popup was closed. */
-async function resumeScan(): Promise<boolean> {
-  const stored = await browser.storage.session.get(RESULT_KEY);
-  const result = stored[RESULT_KEY] as (ScanResult & { at?: number; running?: boolean }) | undefined;
-  if (!result?.at || Date.now() - result.at > PENDING_TTL_MS) return false;
-  openTab("scan");
-  if (result.running) {
-    say("Still reading the address you scanned…", true, scanOut);
-    const done = await waitForResult(90_000);
-    if (done) showScan(done);
-    else say("Still reading. Open ClauseWatch again in a moment to see the result.", true, scanOut);
-    return true;
+const jobList = document.createElement("section");
+jobList.setAttribute("aria-label", "Recent scans");
+const keepOpen = el("button", "Open persistent scan screen", "secondary");
+keepOpen.onclick = () => void browser.tabs.create({ url: browser.runtime.getURL("/popup.html") + (selectedJob ? `?scan=${encodeURIComponent(selectedJob)}` : "?screen=scan") });
+jobList.before(keepOpen);
+let selectedJob: string | null = null;
+let lastJobView = "";
+let viewGeneration = 0;
+
+async function renderJobList() {
+  const jobs = (await jobStore.list()).filter((j) => Date.now() - j.at < JOB_TTL_MS).sort((a, b) => b.at - a.at);
+  jobList.replaceChildren();
+  for (const job of jobs) {
+    const status = { waiting: "Waiting for permission", running: "Reading", complete: "Ready", cancelled: "Cancelled", failed: "Could not finish" }[job.state];
+    const button = el("button", `${job.plan.site} · ${status}`, "secondary");
+    button.type = "button";
+    button.setAttribute("aria-label", `Open scan of ${job.plan.site}: ${job.state}`);
+    button.addEventListener("click", () => void viewJob(job.id));
+    jobList.append(button);
   }
-  await browser.storage.session.remove(RESULT_KEY);
-  showScan(result);
+}
+
+async function viewJob(id: string) {
+  if (selectedJob !== id) void browser.storage.session.set({ [FOCUS_KEY]: id });
+  selectedJob = id;
+  openTab("scan");
+  const job = await jobStore.get(id);
+  if (selectedJob !== id) return;
+  if (!job) return say("This scan is no longer available. Scan the address again.", true, scanOut);
+  const signature = JSON.stringify([id, job.state, job.updated, job.reason, !!job.result]);
+  if (signature === lastJobView) return;
+  lastJobView = signature;
+  const generation = ++viewGeneration;
+  await renderJobList();
+  if (generation !== viewGeneration || selectedJob !== id) return;
+  if (activeJob(job)) {
+    say(job.state === "waiting" ? "Waiting for permission to read this site's documents…" : `Reading ${job.plan.site}'s documents… ${Object.keys(job.pages).length}/${new Set(job.plan.targets.map((t) => t.url)).size} downloads attempted. You can close this window and return to this scan.`, true, scanOut);
+    const cancel = el("button", "Cancel scan", "secondary");
+    cancel.type = "button";
+    cancel.addEventListener("click", () => void browser.runtime.sendMessage({ type: "scan:cancel", id }));
+    scanOut.append(cancel);
+    return;
+  }
+  if (job.result) {
+    try {
+      const read = await readFetched(job.result, rules, sites);
+      if (generation !== viewGeneration || selectedJob !== id) return;
+      show(read.site, read.documents, undefined, { panel: scanOut });
+    } catch { say("Something went wrong reading this scan. Try again.", true, scanOut); }
+  } else say(job.reason ?? "This scan could not finish.", true, scanOut);
+  if (isOwnText(job.plan.site)) return;
+  const retry = el("button", "Scan again", "secondary");
+  retry.type = "button";
+  retry.disabled = true;
+  scanOut.append(retry);
+  const held = await heldOrigins(job.origins);
+  if (generation !== viewGeneration || selectedJob !== id) return;
+  retry.disabled = false;
+  retry.addEventListener("click", () => {
+    const next = requestScan(job.plan, job.origins, held, job.source === "menu" ? "scan" : job.source);
+    void next.saved.then(() => viewJob(next.job.id));
+  });
+}
+
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area !== "session" || !Object.keys(changes).some((key) => key.startsWith(JOB_PREFIX))) return;
+  void renderJobList();
+  if (selectedJob && jobKey(selectedJob) in changes) void viewJob(selectedJob);
+});
+
+async function resumeScan(): Promise<boolean> {
+  void browser.runtime.sendMessage({ type: "scan:wake" }).catch(() => undefined);
+  const focus = (await browser.storage.session.get(FOCUS_KEY))[FOCUS_KEY];
+  const id = new URL(location.href).searchParams.get("scan") ?? (typeof focus === "string" ? focus : null);
+  const focused = id ? await jobStore.get(id) : undefined;
+  const job = focused && Date.now() - focused.at < JOB_TTL_MS ? focused : await latestJob();
+  if (!job || Date.now() - job.at >= JOB_TTL_MS) return false;
+  await viewJob(job.id);
   return true;
 }
 
@@ -648,6 +683,6 @@ for (const el of Object.values(tabs)) {
 
 resumeScan()
   .then((resumed) => {
-    if (!resumed) openTab("site");
+    if (!resumed) openTab(new URL(location.href).searchParams.get("screen") === "scan" ? "scan" : "site");
   })
   .catch(() => openTab("site"));

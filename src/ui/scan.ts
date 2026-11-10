@@ -2,6 +2,7 @@
 // address or pasted text, and the short list of recently checked sites.
 // Everything here runs on the device; nothing is sent anywhere.
 
+import { readableFetched } from "../engine/pdf";
 import { KINDS, kindsOfPage, readDocument, type DocumentResult, type Kind } from "../engine/documents";
 import { isKnownDocument, knownSite, localHost, siteOrigins, type KnownSite } from "../engine/known-sites";
 import type { CompiledRules } from "../engine/rules";
@@ -23,7 +24,10 @@ export interface ScanResult {
    * Pages the background fetched for a scan, not yet read: a Chromium service
    * worker cannot parse HTML, so the popup reads them (readFetched).
    */
-  fetched?: { url: string; kind: Kind | "auto"; pages: Record<string, Fetched> };
+  fetched?: { url: string; kind: Kind | "auto"; pages: Record<string, Fetched>; targets?: { url: string; kind: Kind | "auto" }[] };
+  /** Explicit link candidates saved by a This site scan, in their original order. */
+  groups?: { kind: Kind; urls: string[] }[];
+  explicitKind?: boolean;
 }
 
 /** storage.session keys: saved before the permission prompt, which closes the popup. */
@@ -47,8 +51,8 @@ export function asAddress(input: string): URL | null {
 }
 
 /** Pasted terms or privacy text, read here. */
-export function scanText(text: string, kind: Kind, rules: CompiledRules): ScanResult {
-  return { site: "Pasted text", documents: [readDocument(kind, "", text, "text/plain", rules)] };
+export function scanText(text: string, kind: Kind, rules: CompiledRules, explicitKind = false): ScanResult {
+  return { site: "Pasted text", documents: [readDocument(kind, "", text, "text/plain", rules, { explicitKind })] };
 }
 
 /** The most text read from a paste or a selection, the same everywhere. */
@@ -65,10 +69,10 @@ export function scanPasted(text: string, kind: Kind | "auto", rules: CompiledRul
   const cut = text.length > MAX_PASTED;
   const site = cut ? "Pasted text (its first 200,000 characters)" : "Pasted text";
   if (cut) text = text.slice(0, MAX_PASTED);
-  if (kind !== "auto") return { ...scanText(text, kind, rules), site };
+  if (kind !== "auto") return { ...scanText(text, kind, rules, true), site };
   const read = KINDS.map((k) => scanText(text, k, rules).documents[0]!).filter((d) => d.status === "read");
   if (read.length) return { site, documents: read };
-  return { site, documents: [{ kind: "terms", status: "could_not_read", reason: "The text does not say it is a terms of service or privacy policy. Choose which it is." }] };
+  return { site, documents: [{ kind: "terms", status: "could_not_read", reason: (() => { const failed = readDocument("terms", "", text, "text/plain", rules); return failed.status === "could_not_read" ? failed.reason : "Choose the document type to read this text."; })() }] };
 }
 
 /**
@@ -78,7 +82,7 @@ export function scanPasted(text: string, kind: Kind | "auto", rules: CompiledRul
  */
 export function scanTargets(url: string, kind: Kind | "auto", sites: KnownSite[]): { url: string; kind: Kind | "auto" }[] {
   const known = knownSite(sites, new URL(url).hostname);
-  if (!known || isKnownDocument(known, url)) return [{ url, kind }];
+  if (!known || /\.pdf$/i.test(new URL(url).pathname) || isKnownDocument(known, url)) return [{ url, kind }];
   return KINDS.filter((k) => kind === "auto" || k === kind).map((k) => ({ url: known[k], kind: k }));
 }
 
@@ -92,31 +96,43 @@ export function scanOrigins(url: string, kind: Kind | "auto", sites: KnownSite[]
 export async function scanAddress(url: string, kind: Kind | "auto", rules: CompiledRules, sites: KnownSite[], fetchText: (u: string) => Promise<Fetched>): Promise<ScanResult> {
   const targets = scanTargets(url, kind, sites);
   const documents: DocumentResult[] = [];
-  for (const t of targets) documents.push(...(await scanUrl(t.url, t.kind, rules, fetchText)).documents);
+  for (const t of targets) documents.push(...(await scanUrl(t.url, t.kind, rules, fetchText, kind !== "auto")).documents);
   return { site: siteOf(url), documents };
 }
 
 /** Fetches what a scan of `url` reads, for the popup to read later (readFetched). */
 export async function fetchTargets(url: string, kind: Kind | "auto", sites: KnownSite[], fetchText: (u: string) => Promise<Fetched>): Promise<ScanResult> {
   const pages: Record<string, Fetched> = {};
-  for (const t of scanTargets(url, kind, sites)) pages[t.url] = await fetchText(t.url);
-  return { site: siteOf(url), documents: [], fetched: { url, kind, pages } };
+  const targets = scanTargets(url, kind, sites);
+  for (const t of targets) pages[t.url] = await fetchText(t.url);
+  return { site: siteOf(url), documents: [], explicitKind: kind !== "auto", fetched: { url, kind, pages, targets } };
 }
 
 /** A scan result with any pages the background fetched read here, with these rules. */
 export async function readFetched(r: ScanResult, rules: CompiledRules, sites: KnownSite[]): Promise<ScanResult> {
   if (!r.fetched) return r;
-  const { url, kind, pages } = r.fetched;
-  return scanAddress(url, kind, rules, sites, async (u) => pages[u] ?? { ok: false, reason: "The page could not be reached." });
+  const { url, kind, pages, targets } = r.fetched;
+  const fetcher = async (u: string): Promise<Fetched> => pages[u] ?? { ok: false, reason: "The page could not be reached." };
+  const documents = [...r.documents];
+  if (r.groups) {
+    for (const group of r.groups) documents.push(await readFirst(group.kind, group.urls, group.urls.length, rules, fetcher));
+  } else {
+    // New results carry their targets. Older session results use their fetched addresses,
+    // never a newer known-site list that may point somewhere else.
+    for (const target of targets ?? Object.keys(pages).map((u) => ({ url: u, kind }))) {
+      documents.push(...(await scanUrl(target.url, target.kind, rules, fetcher, r.explicitKind ?? false)).documents);
+    }
+  }
+  return { site: r.site, documents };
 }
 
 /**
  * Reads one address. "auto" reads it as whichever document the page says it
  * is; a page that is neither is not read, and says so.
  */
-export async function scanUrl(url: string, kind: Kind | "auto", rules: CompiledRules, fetchText: (u: string) => Promise<Fetched>): Promise<ScanResult> {
+export async function scanUrl(url: string, kind: Kind | "auto", rules: CompiledRules, fetchText: (u: string) => Promise<Fetched>, explicitKind = kind !== "auto"): Promise<ScanResult> {
   const site = siteOf(url);
-  const got = await fetchText(url);
+  const got = await readableFetched(await fetchText(url));
   if (!got.ok) return { site, documents: [{ kind: kind === "auto" ? "terms" : kind, status: "could_not_read", url, reason: got.reason }] };
   const type = got.contentType.toLowerCase();
   const html = type.includes("text/html") || type === "";
@@ -129,9 +145,9 @@ export async function scanUrl(url: string, kind: Kind | "auto", rules: CompiledR
         ? kindsOfPage(got.text)
         : KINDS.filter((k) => readDocument(k, got.url, got.text, got.contentType, rules).status === "read");
   if (kinds.length === 0) {
-    return { site, documents: [{ kind: "terms", status: "could_not_read", url: got.url, reason: "This address is not a terms of service or privacy policy page. Choose which it is, or paste the text." }] };
+    return { site, documents: [{ kind: "terms", status: "could_not_read", url: got.url, reason: (() => { const failed = readDocument("terms", got.url, got.text, got.contentType, rules); return failed.status === "could_not_read" ? failed.reason : "Choose the document type, or read the rendered policy in its tab."; })() }] };
   }
-  return { site, documents: kinds.map((k) => readDocument(k, got.url, got.text, got.contentType, rules)) };
+  return { site, documents: kinds.map((k) => readDocument(k, got.url, got.text, got.contentType, rules, { explicitKind })) };
 }
 
 /** A site checked on this device, newest first, with what its documents said last time. */
@@ -143,6 +159,7 @@ export interface RecentSite {
   /** Documents whose text differed from the check before, noted for 30 days. */
   changed: Kind[];
   changedAt?: string;
+  documents?: Record<string, { kind: Kind; hash: string; changedAt?: string }>;
   /** Topics found in what was read last time; absent on entries from before. */
   found?: number;
 }
@@ -161,29 +178,39 @@ async function sha256(text: string): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/**
- * Adds a checked site to the list. A document whose text differs from the
- * previous check is marked changed; nothing is said about one not read now.
- */
+/** Expire badges at display time, including legacy history entries. */
+export function recentHistory(list: RecentSite[], now = Date.now()): RecentSite[] {
+  const fresh = (at?: string) => !!at && Date.parse(at) <= now && now - Date.parse(at) < CHANGED_FOR_MS;
+  return list.map((entry) => {
+    if (!entry.documents) return fresh(entry.changedAt) ? entry : { ...entry, changed: [], changedAt: undefined };
+    const documents = Object.fromEntries(Object.entries(entry.documents).map(([id, d]) => [id, { ...d, changedAt: fresh(d.changedAt) ? d.changedAt : undefined }]));
+    const active = Object.values(documents).filter((d) => d.changedAt);
+    return { ...entry, documents, changed: [...new Set(active.map((d) => d.kind))], changedAt: active.map((d) => d.changedAt!).sort().at(-1) };
+  });
+}
+
+/** Fingerprints are scoped to kind and full canonical source URL, including
+ * query and fragment. A new source establishes a baseline, never a revision. */
 export async function recordRecent(list: RecentSite[], site: string, documents: DocumentResult[], now = new Date()): Promise<RecentSite[]> {
-  const before = list.find((r) => r.site === site);
-  const hashes: Partial<Record<Kind, string>> = { ...(before?.hashes ?? {}) };
-  // A change stays noted for 30 days, so checking the same site again soon
-  // (or the two steps of one check) does not hide it.
-  const recent = before?.changedAt && now.getTime() - Date.parse(before.changedAt) < CHANGED_FOR_MS;
-  const changed = new Set<Kind>(recent ? before!.changed : []);
-  let changedAt = recent ? before!.changedAt : undefined;
+  const cleaned = recentHistory(list, now.getTime());
+  const before = cleaned.find((r) => r.site === site);
+  const hashes = { ...(before?.hashes ?? {}) };
+  const sources = { ...(before?.documents ?? {}) };
   for (const d of documents) {
-    if (d.status !== "read" || !d.body) continue;
-    const h = await sha256(d.body);
-    if (before?.hashes[d.kind] && before.hashes[d.kind] !== h) {
-      changed.add(d.kind);
-      changedAt = now.toISOString();
-    }
-    hashes[d.kind] = h;
+    if (d.status !== "read" || !d.body || !URL.canParse(d.url)) continue;
+    const url = new URL(d.url);
+    if (!/^https?:$/.test(url.protocol)) continue;
+    const identity = await sha256(JSON.stringify([d.kind, url.href]));
+    const hash = await sha256(d.body);
+    const previous = sources[identity];
+    const changedAt = previous && previous.hash !== hash ? now.toISOString() : previous?.changedAt;
+    delete sources[identity];
+    sources[identity] = { kind: d.kind, hash, ...(changedAt ? { changedAt } : {}) };
+    hashes[d.kind] = hash;
   }
-  const entry: RecentSite = { site, at: now.toISOString(), hashes, changed: [...changed], ...(changedAt ? { changedAt } : {}), found: foundCount(documents) };
-  return [entry, ...list.filter((r) => r.site !== site)].slice(0, MAX_RECENT);
+  const kept = Object.fromEntries(Object.entries(sources).slice(-20));
+  const entry: RecentSite = { site, at: now.toISOString(), hashes, documents: kept, changed: [], found: foundCount(documents) };
+  return [recentHistory([entry], now.getTime())[0]!, ...cleaned.filter((r) => r.site !== site)].slice(0, MAX_RECENT);
 }
 
 /**
@@ -193,7 +220,7 @@ export async function recordRecent(list: RecentSite[], site: string, documents: 
 export async function readFirst(kind: Kind, urls: string[], tries: number, rules: CompiledRules, fetchText: (u: string) => Promise<Fetched>): Promise<DocumentResult> {
   let last: DocumentResult = { kind, status: "could_not_read", reason: "No link to this document was found on the page." };
   for (const url of urls.slice(0, tries)) {
-    const got = await fetchText(url);
+    const got = await readableFetched(await fetchText(url));
     last = got.ok ? readDocument(kind, got.url, got.text, got.contentType, rules) : { kind, status: "could_not_read", url, reason: got.reason };
     if (last.status === "read") break;
   }

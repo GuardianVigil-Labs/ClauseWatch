@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "flags": "i",
+  "minQuoteWords": 8,
+  "categories": [
+    "data_sale",
+    "auto_renewal",
+    "arbitration"
+  ],
+  "rules": [
+    {
+      "id": "es-data-sale",
+      "category": "data_sale",
+      "all": [
+        "(vendemos|podemos vender) (sus |tus )?datos personales"
+      ],
+      "none": [
+        "no (vendemos|podemos vender)",
+        "\\b(no|nunca|jam[aá]s)\\b"
+      ]
+    },
+    {
+      "id": "es-renewal",
+      "category": "auto_renewal",
+      "all": [
+        "(suscripci[oó]n|plan)",
+        "(renueva|renovar[aá]).{0,100}autom[aá]ticamente"
+      ],
+      "none": [
+        "no se (renueva|renovar[aá])",
+        "\\b(no|nunca|jam[aá]s)\\b"
+      ]
+    },
+    {
+      "id": "es-arbitration",
+      "category": "arbitration",
+      "all": [
+        "(disputas|controversias).{0,100}(arbitraje vinculante|arbitraje obligatorio)"
+      ],
+      "none": [
+        "no.{0,100}(arbitraje vinculante|arbitraje obligatorio)",
+        "\\b(no|nunca|jam[aá]s)\\b"
+      ]
+    }
+  ]
+}

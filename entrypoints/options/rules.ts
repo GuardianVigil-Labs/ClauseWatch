@@ -2,10 +2,11 @@
 // import your own. Own rules never leave this device unless you export them.
 
 import { BUNDLED as bundled } from "../../src/engine/bundled";
+import { compileRules, matchingSentences } from "../../src/engine/rules";
 import fixtures from "../../rules/rules_fixtures.json";
 import { kv } from "../../src/storage";
 import { currentRulesFile } from "../../src/engine/rules-update";
-import { DISABLED_KEY, exportOwn, MAX_OWN_RULES, OWN_KEY, ownRuleId, ownRuleProblem, parseImport, type OwnRule } from "../../src/engine/rule-set";
+import { DISABLED_KEY, exportOwn, mergeRules, MAX_OWN_RULES, OWN_KEY, ownRuleId, ownRuleProblem, parseImport, type RuleEdit, type OwnRule } from "../../src/engine/rule-set";
 import { topicLabel, topicShort } from "../../src/ui/report";
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, cls?: string): HTMLElementTagNameMap[K] {
@@ -83,31 +84,23 @@ export async function renderRules(host: HTMLElement, note?: string): Promise<voi
   const file = await currentRulesFile(kv, bundled);
   const known = file.categories;
   const { disabled, own } = await stored();
-  const save = async (next: { disabled?: string[]; own?: OwnRule[] }, note?: string) => {
+  const save = async (edit: RuleEdit, note?: string) => {
     saving++;
     try {
-      // What is stored now, not what this pane was drawn with: another page may have changed it.
-      const fresh = await stored();
-      const ownNext = next.own ?? fresh.own;
-      // Only ids that still exist are kept switched off.
-      const exists = new Set([...file.rules.map((r) => r.id), ...ownNext.map((r) => r.id)]);
-      if (next.disabled || next.own) await kv.set(DISABLED_KEY, (next.disabled ?? fresh.disabled).filter((d) => exists.has(d)));
-      if (next.own) await kv.set(OWN_KEY, next.own);
-      // A saved rule clears the draft in "Add my rule".
-      await redrawRules(host, note, !(next.own && next.own.length > own.length));
-    } finally {
-      saving--;
-    }
+      const result = await browser.runtime.sendMessage({ type: "rules:edit", edit }) as { ok: boolean; reason?: string };
+      if (!result?.ok) throw new Error(result?.reason ?? "The rules could not be saved.");
+      await redrawRules(host, note, edit.type !== "add");
+    } finally { saving--; }
   };
-  const toggle = async (id: string, on: boolean) => {
-    const { disabled: now } = await stored();
-    await save({ disabled: on ? now.filter((d) => d !== id) : [...new Set([...now, id])] });
-  };
+  const toggle = (id: string, on: boolean) => save({ type: "toggle", id, on }).catch((err) => redrawRules(host, err instanceof Error ? err.message : "The rule could not be switched."));
 
   const s = el("section");
   const heading = el("h2", "Detection ");
   heading.append(el("strong", "rules"));
-  s.append(heading, el("p", "Every finding is a sentence a rule matched, quoted. Rules you switch off or write yourself stay on this device. Changes apply the next time a page is read.", "note"));
+  s.append(heading, el("p", "Every finding quotes the matched source text, including an adjacent list introduction where needed. Rules you switch off or write yourself stay on this device. Changes apply the next time a page is read.", "note"));
+  const signedBase = compileRules(file);
+  const merged = mergeRules(signedBase, { disabled, own });
+  if (merged.skipped.length) s.append(el("p", `${merged.skipped.length} custom rules are not running: ${merged.skipped.slice(0, 20).map((id) => own.find((r) => r?.id === id)?.title ?? id).join(", ")}${merged.skipped.length > 20 ? "…" : ""}. Delete or correct these rules, or reset the defaults.`, "note"));
 
   // Tabs: the signed rules, mine, import.
   const tablist = el("div", undefined, "tabs");
@@ -161,7 +154,7 @@ export async function renderRules(host: HTMLElement, note?: string): Promise<voi
     copy.addEventListener("click", () => {
       const ex = (fixtures as { fixtures: Record<string, { match: string[]; noMatch: string[] }> }).fixtures[r.id];
       show("mine");
-      fill({ title: `${titleOf(r.id)} (my copy)`, category: r.category, all: r.all, none: r.none ?? [], examples: { match: ex?.match.slice(0, 3) ?? [], noMatch: ex?.noMatch.slice(0, 3) ?? [] } });
+      fill({ title: `${titleOf(r.id)} (my copy)`, category: r.category, all: r.all, none: r.none ?? [], scope: r.scope, examples: { match: ex?.match.filter((s) => matchingSentences(s, signedBase.rules.find((x) => x.id === r.id)!, file.minQuoteWords).length > 0).slice(0, 3) ?? [], noMatch: ex?.noMatch.slice(0, 3) ?? [] } });
     });
     const copyCell = el("td");
     copyCell.append(copy);
@@ -182,16 +175,16 @@ export async function renderRules(host: HTMLElement, note?: string): Promise<voi
   if (!own.length) minePane.append(el("p", "None yet. Write one below, copy a ClauseWatch rule, or import a file.", "note"));
   else {
     const t = table(["Rule", "Category", "Source", "On", ""]);
-    for (const r of own) {
+    for (const r of own.filter((r) => r && typeof r.id === "string")) {
       const tr = el("tr");
       const del = el("button", "Delete", "secondary small");
       del.id = `delete-${r.id}`;
       del.type = "button";
       del.setAttribute("aria-label", `Delete ${r.title}`);
-      del.addEventListener("click", () => void save({ own: own.filter((x) => x.id !== r.id), disabled: disabled.filter((d) => d !== r.id) }));
+      del.addEventListener("click", () => void save({ type: "delete", id: r.id }).catch((err) => redrawRules(host, String(err))));
       const delCell = el("td");
       delCell.append(del);
-      tr.append(el("td", r.title, "mono"), el("td", topicShort(r.category)), el("td", "my rule · checked", "nowrap"), ruleSwitch(r.id, r.title, !disabled.includes(r.id), (on) => void toggle(r.id, on)), delCell);
+      tr.append(el("td", r.title, "mono"), el("td", topicShort(r.category)), el("td", merged.skipped.includes(r.id) ? "not running" : "my rule", "nowrap"), ruleSwitch(r.id, r.title, !disabled.includes(r.id), (on) => void toggle(r.id, on)), delCell);
       t.body.append(tr);
     }
     minePane.append(t.table);
@@ -212,6 +205,8 @@ export async function renderRules(host: HTMLElement, note?: string): Promise<voi
   const title = field("Name", el("input"));
   const topic = field("Topic", el("select"));
   for (const c of known) topic.append(Object.assign(el("option", topicLabel(c)), { value: c }));
+  const scope = field("Match scope", el("select"), "Sentence checks the whole sentence. Separate assertions can recover an explicit permission after a denial; the full sentence is still quoted.");
+  scope.append(Object.assign(el("option", "Whole sentence"), { value: "sentence" }), Object.assign(el("option", "Separate assertions"), { value: "assertion" }));
   const area = (rows: number) => Object.assign(el("textarea"), { rows });
   const all = field("Patterns a sentence must match (one per line, all of them)", area(3), "Regular expressions, case-insensitive. Lookarounds and back-references are not allowed.");
   const none = field("Patterns it must not match (one per line)", area(2), "For example \\bnot\\b, so \"we do not…\" is left out.");
@@ -226,6 +221,7 @@ export async function renderRules(host: HTMLElement, note?: string): Promise<voi
   function fill(r: Omit<OwnRule, "id">) {
     title.value = r.title;
     topic.value = r.category;
+    scope.value = r.scope ?? "sentence";
     all.value = r.all.join("\n");
     none.value = r.none.join("\n");
     yes.value = r.examples.match.join("\n");
@@ -242,16 +238,17 @@ export async function renderRules(host: HTMLElement, note?: string): Promise<voi
       id: ownRuleId(title.value),
       title: title.value.trim(),
       category: topic.value,
+      ...(scope.value === "assertion" ? { scope: "assertion" as const } : {}),
       all: lines(all.value),
       none: lines(none.value),
       examples: { match: lines(yes.value), noMatch: lines(no.value) },
     };
-    const problem = ownRuleProblem(rule, known);
+    const problem = ownRuleProblem(rule, known, file.minQuoteWords);
     if (problem) {
       msg.textContent = problem;
       return;
     }
-    void save({ own: [...own, rule] });
+    void save({ type: "add", rules: [rule] }).catch((err) => { msg.textContent = err instanceof Error ? err.message : "The rule could not be saved."; });
   });
   minePane.append(form);
 
@@ -273,9 +270,9 @@ export async function renderRules(host: HTMLElement, note?: string): Promise<voi
     if (!f) return;
     try {
       if (f.size > 512 * 1024) throw new Error("The file is too large (at most 512 KB).");
-      const rules = parseImport(await f.text(), known);
+      const rules = parseImport(await f.text(), known, file.minQuoteWords);
       if (own.length + rules.length > MAX_OWN_RULES) throw new Error(`That would make more than ${MAX_OWN_RULES} rules.`);
-      await save({ own: [...own, ...rules] }, `Imported ${rules.length} rule${rules.length === 1 ? "" : "s"}.`);
+      await save({ type: "add", rules }, `Imported ${rules.length} rule${rules.length === 1 ? "" : "s"}.`);
     } catch (err) {
       status.textContent = err instanceof Error ? err.message : "The file could not be imported.";
     } finally {
@@ -297,7 +294,7 @@ export async function renderRules(host: HTMLElement, note?: string): Promise<voi
   reset.className = "secondary";
   reset.addEventListener("click", () => {
     if (!confirm("Switch every ClauseWatch rule back on and delete your own rules?")) return;
-    void save({ disabled: [], own: [] });
+    void save({ type: "reset" }).catch((err) => { status.textContent = String(err); });
   });
   tools.append(importBtn, " ", exportBtn, " ", reset, pick);
   importPane.append(el("p", "Import a rules file someone shared, or export your own. Imported rules pass the same checks as rules you write.", "note"), tools, status);

@@ -1,0 +1,220 @@
+// Recoverable scan jobs. Requests, checkpoints and results are separate per id;
+// a popup is only a viewer, never the owner of a document download.
+import type { Fetched } from "../auto/background";
+import type { DocumentResult, Kind } from "../engine/documents";
+import type { KnownSite } from "../engine/known-sites";
+import type { ScanResult } from "../ui/scan";
+
+export const FOCUS_KEY = "scan:focus";
+export const JOB_PREFIX = "scan:job:";
+export const JOB_TTL_MS = 10 * 60 * 1000;
+export const MAX_JOBS = 8;
+const MAX_SESSION_CHARS = 2 * 1024 * 1024;
+const MAX_RECOVERIES = 3;
+export interface ScanPlan {
+  site: string;
+  url: string;
+  kind: Kind | "auto";
+  targets: { url: string; kind: Kind | "auto" }[];
+  groups?: { kind: Kind; urls: string[] }[];
+  documents: DocumentResult[];
+  sites: KnownSite[];
+  explicitKind?: boolean;
+}
+export interface ScanJob {
+  id: string;
+  at: number;
+  updated: number;
+  source: "site" | "scan" | "menu";
+  state: "waiting" | "running" | "complete" | "cancelled" | "failed";
+  plan: ScanPlan;
+  origins: string[];
+  /** Only origins absent before this request. Other jobs may borrow them. */
+  addedOrigins: string[];
+  released?: boolean;
+  recoveries: number;
+  pages: Record<string, Fetched>;
+  result?: ScanResult;
+  reason?: string;
+}
+export interface JobStore {
+  list(): Promise<ScanJob[]>;
+  get(id: string): Promise<ScanJob | undefined>;
+  put(job: ScanJob): Promise<void>;
+  remove(id: string): Promise<void>;
+}
+export const activeJob = (job: ScanJob) => job.state === "waiting" || job.state === "running";
+export const jobKey = (id: string) => `${JOB_PREFIX}${id}`;
+function clearPayload(job: ScanJob): void {
+  job.pages = {};
+  job.plan.documents = [];
+  delete job.result;
+}
+export function newJob(plan: ScanPlan, origins: string[], addedOrigins: string[], source: ScanJob["source"], now = Date.now()): ScanJob {
+  return { id: crypto.randomUUID(), at: now, updated: now, source, state: "waiting", plan, origins, addedOrigins, pages: {}, recoveries: 0 };
+}
+
+interface JobIO {
+  store: JobStore;
+  allowed(origins: string[]): Promise<boolean>;
+  release(origins: string[]): Promise<void>;
+  fetch(url: string, sites: KnownSite[], signal: AbortSignal): Promise<Fetched>;
+  completed?(job: ScanJob): Promise<void>;
+  now?: () => number;
+}
+
+export class ScanJobs {
+  private running: Promise<void> | null = null;
+  private dirty = false;
+  private controllers = new Map<string, AbortController>();
+  private now: () => number;
+  constructor(private io: JobIO) { this.now = io.now ?? Date.now; }
+
+  /** Called once when a worker starts, before processing newly saved jobs. */
+  async recover(): Promise<void> {
+    await this.expire();
+    for (const job of await this.io.store.list()) {
+      if (job.state !== "running") continue;
+      job.recoveries++;
+      job.state = job.recoveries > MAX_RECOVERIES ? "failed" : "waiting";
+      if (job.state === "failed") job.reason = "This scan was interrupted repeatedly. Try again.";
+      await this.io.store.put(job);
+    }
+  }
+
+  wake(): Promise<void> {
+    this.dirty = true;
+    if (!this.running) this.running = this.drain().finally(() => { this.running = null; });
+    return this.running;
+  }
+
+  /** May run while another job is fetching: expiry must not wait for its queue. */
+  async expire(): Promise<void> {
+    for (const job of await this.io.store.list()) {
+      if (this.now() - job.at < JOB_TTL_MS) continue;
+      this.controllers.get(job.id)?.abort();
+      if (job.released) { await this.io.store.remove(job.id); continue; }
+      clearPayload(job);
+      if (activeJob(job)) { job.state = "failed"; job.reason = "This scan expired. Try again."; }
+      await this.io.store.put(job);
+    }
+  }
+
+  async cancel(id: string): Promise<void> {
+    this.controllers.get(id)?.abort();
+    const job = await this.io.store.get(id);
+    if (!job || !activeJob(job)) return;
+    job.state = "cancelled";
+    job.reason = "The scan was cancelled.";
+    clearPayload(job);
+    job.updated = this.now();
+    await this.io.store.put(job);
+    await this.wake();
+  }
+
+  private async drain(): Promise<void> {
+    do {
+      this.dirty = false;
+      const jobs = (await this.io.store.list()).sort((a, b) => a.at - b.at);
+      for (const job of jobs) {
+        if (this.now() - job.at >= JOB_TTL_MS) {
+          clearPayload(job);
+          if (activeJob(job)) {
+            job.state = "failed";
+            job.reason = "This scan expired. Try again and allow access to its sites.";
+            job.pages = {};
+            job.updated = this.now();
+            await this.io.store.put(job);
+          } else if (job.released) await this.io.store.remove(job.id);
+          else await this.io.store.put(job);
+          continue;
+        }
+        if (job.state === "waiting" && await this.io.allowed(job.origins)) await this.run(job);
+      }
+      await this.releasePermissions();
+      await this.prune();
+    } while (this.dirty);
+  }
+
+  private async run(job: ScanJob): Promise<void> {
+    // Cancellation may have arrived since the list was read.
+    if ((await this.io.store.get(job.id))?.state !== "waiting") return;
+    const controller = new AbortController();
+    let expired = false;
+    const deadline = setTimeout(() => { expired = true; controller.abort(); }, Math.max(0, JOB_TTL_MS - (this.now() - job.at)));
+    this.controllers.set(job.id, controller);
+    job.state = "running";
+    job.updated = this.now();
+    try {
+      await this.io.store.put(job);
+      const urls = [...new Set(job.plan.targets.map((t) => t.url))];
+      for (const url of urls) {
+        if (controller.signal.aborted) break;
+        if (!job.pages[url]?.ok) {
+          try { job.pages[url] = await this.io.fetch(url, job.plan.sites, controller.signal); }
+          catch { job.pages[url] = { ok: false, reason: "The page could not be reached. Try again." }; }
+        }
+        if (this.now() - job.at >= JOB_TTL_MS) { expired = true; controller.abort(); }
+        // Save completed downloads before moving on. Recovery reuses these pages.
+        if (controller.signal.aborted) break;
+        job.updated = this.now();
+        if (JSON.stringify(job).length > MAX_SESSION_CHARS) throw new Error("The scan is too large to keep. Open a policy in a tab and use This site.");
+        await this.makeRoom(job);
+        await this.io.store.put(job);
+      }
+      if (controller.signal.aborted || (await this.io.store.get(job.id))?.state === "cancelled") return;
+      job.state = "complete";
+      // Keep pages once, inside the result, rather than duplicating large strings in storage.
+      job.result = { site: job.plan.site, documents: job.plan.documents, groups: job.plan.groups, explicitKind: job.plan.explicitKind, fetched: { url: job.plan.url, kind: job.plan.kind, targets: job.plan.targets, pages: job.pages } };
+      job.pages = {};
+      job.updated = this.now();
+      await this.makeRoom(job);
+      await this.io.store.put(job);
+    } catch (err) {
+      if (controller.signal.aborted || (await this.io.store.get(job.id))?.state === "cancelled") return;
+      job.state = "failed";
+      job.pages = {};
+      delete job.result;
+      job.reason = err instanceof Error ? err.message : "The scan could not finish. Try again.";
+      await this.io.store.put(job);
+    } finally {
+      clearTimeout(deadline);
+      this.controllers.delete(job.id);
+      if (expired) {
+        const latest = await this.io.store.get(job.id);
+        if (latest) { clearPayload(latest); latest.state = "failed"; latest.reason = "This scan expired. Try again."; await this.io.store.put(latest); }
+      }
+    }
+    if (job.source === "menu") await this.io.completed?.(job);
+  }
+
+  private async makeRoom(next: ScanJob): Promise<void> {
+    const jobs = (await this.io.store.list()).filter((j) => j.id !== next.id);
+    let size = JSON.stringify(next).length + jobs.reduce((n, j) => n + JSON.stringify(j).length, 0);
+    for (const old of jobs.filter((j) => !activeJob(j)).sort((a, b) => a.at - b.at)) {
+      if (size <= MAX_SESSION_CHARS) break;
+      const before = JSON.stringify(old).length;
+      clearPayload(old);
+      old.state = "failed";
+      old.reason = "This result was cleared to make room for another scan. Try again.";
+      await this.io.store.put(old);
+      size -= before - JSON.stringify(old).length;
+    }
+    if (size > MAX_SESSION_CHARS) throw new Error("There is not enough room to keep this scan. Cancel another scan and try again.");
+  }
+
+  private async releasePermissions(): Promise<void> {
+    const jobs = await this.io.store.list();
+    // An origin borrowed by a second queued job is not removed underneath it.
+    if (jobs.some(activeJob)) return;
+    const unreleased = jobs.filter((j) => !j.released);
+    const origins = [...new Set(unreleased.flatMap((j) => j.addedOrigins))];
+    if (origins.length) await this.io.release(origins);
+    for (const job of unreleased) { if (this.now() - job.at >= JOB_TTL_MS) clearPayload(job); job.released = true; await this.io.store.put(job); }
+  }
+
+  private async prune(): Promise<void> {
+    const jobs = (await this.io.store.list()).filter((j) => !activeJob(j) && j.released).sort((a, b) => b.at - a.at);
+    for (const [index, job] of jobs.entries()) if (index >= MAX_JOBS || this.now() - job.at >= JOB_TTL_MS) await this.io.store.remove(job.id);
+  }
+}

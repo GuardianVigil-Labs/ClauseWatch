@@ -1,81 +1,146 @@
 # ClauseWatch user guide
 
-ClauseWatch reads a service's terms of service and privacy policy, on your device, and quotes the sentences that matter before you sign up. It never scores a service, grades it or calls it safe: it shows you the words, and you decide. Quotes from the documents, not legal advice.
+ClauseWatch shows what a policy says using exact quotes. It does not score a service or replace legal advice. These instructions describe the current source checkout; published builds may differ. See [the changelog](https://github.com/GuardianVigil-Labs/ClauseWatch/blob/main/CHANGELOG.md).
 
-## Setting up
+## Install and set up
 
-When you install ClauseWatch, a setup page opens: a short introduction, then two choices. You can change both later in **Settings**, or open setup again from **Settings → Sites → Run setup again**.
+For source builds, follow [the README](https://github.com/GuardianVigil-Labs/ClauseWatch/blob/main/README.md#build-and-load). Setup opens when the extension is installed. Settings can reopen it through **Sites → Run setup again**.
 
-**AI help.** Rules always run first. AI can look for clauses the rules missed and summarise what the quotes say.
+Choose whether to use AI help and when the extension should appear. AI is off by default. Automatic mode is preselected in setup but starts only after you choose **Done** and grant the browser's site-access request. Choosing click-only mode or denying that request leaves automatic mode inactive.
 
-| Choice | What leaves your device |
+| AI choice | Policy text sent to an AI service |
 |---|---|
-| **No AI, rules only** (the default) | Nothing. |
-| **The browser's built-in AI** (only shown where the browser has one) | Nothing: the model runs on your device. If the browser first has to download its model, setup says so; it can be several gigabytes. |
-| **My own AI key** | What you ask about, sent to the AI service whose address you enter in Settings, under your account there: the quotes found for a summary, or the text being checked (the document, or the text you pasted or selected, up to 24,000 characters) when you ask it to look for clauses the rules missed. Never what you type into forms, passwords, cookies or history. Your key stays on your device. |
+| **No AI, rules only** | None. Rules run on the device. |
+| **The browser's built-in AI** | None from ClauseWatch. The browser may need to download its model first. |
+| **My own AI key** | Only what you explicitly ask to analyse or summarise, sent to the endpoint configured in Settings. |
 
-**When ClauseWatch appears.**
+Policy retrieval from the document host and signed-rules downloads are separate network requests regardless of the AI choice. See [privacy](PRIVACY.md).
 
-- **Show automatically on sign-up pages** (recommended, and chosen to start with): when you click **Done**, ClauseWatch asks your browser for access to all sites. Say no, or pick the other choice, and it appears only when you click it. It uses that access only to recognise sign-up forms and to read that site's terms on your device. Turning it off gives the access back.
-- **Only when I click the icon**: ClauseWatch reads a site only when you click it, one site at a time.
+## Reading and recovery
 
-## Reading a site
+### Read this site
 
-Click the ClauseWatch icon. The popup has two tabs.
+Open a service's page and click the toolbar icon. **This site** reads the visible page or offers its policy links. On known services, ClauseWatch uses the configured policy addresses. Grant site access when you choose to fetch them. Temporary scan access is released when scans no longer need it; access held before the scan is preserved.
 
-**This site** reads the current site's terms and privacy policy and shows, for each topic, either:
+A report shows exact findings, topics not found in the text checked, and any documents that could not be read. Review the source and coverage notices: an unrecognised clause, omitted topic or unread document is not evidence that a service is safe.
 
-- the topic's name, what such a clause allows, and the exact sentence quoted, with a link to the document. The quote is the document's own words, never a paraphrase.
-- **Not found:** the topics nothing in what was read matched, with the documents checked. This is not a verdict that the service is safe ("“Not found” is not “safe”"); wording the rules do not know is not caught.
-- **Could not read this document**, and why: for example, no link to it was found, the page is a PDF, or the site did not answer.
+### Scan a link or paste text
 
-**Scan a link** reads a terms or privacy address you paste, or the text itself. Pasted text is read on your device; an address is read once, with your permission for that one site. If you choose an address, ClauseWatch asks for access to that site, and the scan finishes even if the popup closes while you answer.
+Open **Scan a link**, enter the policy address, choose a document type if needed, and press **Scan**. **Paste terms text instead** reads pasted text locally without site permission. Paste and selection reads use at most the first 200,000 characters, with a truncation notice. Readable documents and quotes need at least eight words in the current rules configuration.
 
-## Known sites
+Link scans continue after the popup closes. Reopen a recent scan to see its progress, **Cancel scan**, or **Scan again**. **Open persistent scan screen** opens the same controls in a browser tab. Downloads and full scan results expire ten minutes after job creation and may be cleared earlier to make room; keeping the screen open does not extend that period.
 
-For about 45 popular AI and software services, ClauseWatch knows exactly where the terms and privacy policy are (the [known-sites list](../rules/sites.json), signed with the rules). On one of their sites, **This site**, the card and **Scan a link** (with any address on the service, such as its home page) read those documents directly, even where the page itself has no link to them. On a known service's sign-up page, the card in automatic mode shows when the page opens, before you start filling anything in, because many services sign you up with a single button. The terms may be on another of the company's sites; ClauseWatch asks for access to the sites it reads, and gives it back afterwards.
+### Recover a dynamic or protected policy
 
-A service missing, or a link out of date? Add it by pull request: see [rules.md](rules.md#known-sites).
+When a failed policy offers **Open terms policy and read this tab** or **Open privacy policy and read this tab**:
 
-## The right-click menu
+1. Open it in the browser, wait for its content and sign in yourself if required.
+2. Open ClauseWatch on that policy tab.
+3. In **This site**, choose **Visible document type**, then **Read visible policy**.
 
-Anywhere ClauseWatch does not find the documents itself:
+This reads the loaded page rather than making a separate cookie-free document request. Manual type selection bypasses document-name recognition, with a notice; it does not prove that the policy is complete. Open collapsed sections first. Common computed-hidden elements are excluded. Open shadow roots and slots are included; closed roots and iframe contents are outside this manual snapshot.
 
-- **ClauseWatch: check this terms link**: right-click a link to a terms or privacy page. ClauseWatch asks for access to that site once, reads it, and opens the result.
-- **ClauseWatch: check selected text**: select a clause or a few, right-click, and ClauseWatch quotes what the rules find in it, read on your device. A selection needs at least eight words; at most its first 200,000 characters are read (the same for pasted text), and the result says when it was cut.
+A **Find policy control** button focuses a discovered terms/privacy control. Activate it yourself, wait for the text or new tab, then read the visible policy. ClauseWatch does not sign in or click site controls for you.
 
-With AI help on, two more buttons appear:
+### External policy hosts
 
-- **Look for clauses the rules missed (AI)**, for documents read on this device. Every AI finding must quote the document word for word, or it is not shown. It is labelled **Found by AI (quoted)**.
-- **Summarise the quotes (AI)**: up to four sentences above the report, labelled as AI. Every sentence names the quotes it rests on, and a sentence that judges the service ("safe", "standard", "nothing to worry about", a score) is removed. AI can still be wrong or misled by the page: the quotes are what the documents say.
+Under **Policies on other sites (optional)**, select the policies you want to read, then grant access to the displayed hosts. Discovery alone does not fetch them. Automatic mode does not use this manual selection list; it reads only its page's own site or the known service's configured legal documents.
 
-## The card on sign-up pages
+### PDFs
 
-In automatic mode, a small card appears when you start filling in a sign-up form, with the same quotes.
+Scan the PDF address, or use **Read this PDF** when the extension recognises the address as a PDF. Extraction runs locally, with a 100-page limit, 200,000 extracted-character limit and 15-second deadline. Downloads still have the 2 MiB and 20-second limits. Image-only PDFs need a text version; password-protected PDFs must be opened by you and their text pasted or selected. Automatic cards direct PDF reading to the popup. No OCR or remote conversion service is used.
 
-- **Don't show on this site** stops the card on that site. Settings → Sites lists those sites, with **Show again**.
-- A site ClauseWatch read in the last week stays quiet; the icon shows a dot instead.
+### Right-click menu
 
-## Rules
+- **ClauseWatch: check this terms link** asks for access and reads the linked policy.
+- **ClauseWatch: check selected text** checks the selection locally. Select at least eight words. The report labels selected text separately from a complete document.
 
-**Settings → Rules** has tabs. **ClauseWatch rules** lists every rule with a switch and a **Copy** button to edit it as your own. **My rules** holds your own rules and **Add my rule** (each tested against your example sentences before it is saved). **Import** imports or exports a rules file, and resets to the defaults. Settings has a menu on the left: General, AI help, Rules, Sites, Privacy and About. See [rules.md](rules.md).
+## Verify findings and coverage
 
-## Sharing
+**Show surrounding text** is available for rule and AI findings. It shows bounded nearby source text; an older saved finding may have only its quote. Context is not an additional finding, and a topic label does not replace qualifications in the source.
 
-The popup's **Share** menu shares a plain link to the ClauseWatch page: copy it, or send it by email, Reddit, X, LinkedIn or WhatsApp. **Copy quote & share** on a finding copies the site, the exact sentence and the link. Nothing about you is added, and there is no tracking code.
+**Highlight quote in policy** opens the source with a text-fragment hint. Support depends on the browser, page and the text still being present. Protected pages, dynamic content and PDF viewers may not highlight it. Copy the quote and search the source when needed.
 
-## Data requests
+| Language | Topic checks |
+|---|---|
+| English | The current English rule set: 19 bundled rules under 13 topics, plus applicable user rules and choices. |
+| Spanish | Pack version 1: data sale, automatic renewal and arbitration only. |
+| French | Pack version 1: data sale, automatic renewal and arbitration only. |
+| Other detected languages | Coverage notice and no topic results. |
+| Uncertain language | A notice and default English checks; topics may be missed. |
 
-On a site's report, ClauseWatch can draft a request to the service to erase your data, give you a copy, or close your account, under the GDPR or the CCPA. It suggests the service's privacy address from its privacy policy, and you send the letter from your own email program. Nothing is sent by ClauseWatch.
+Detection is an estimate, not translation. Manual document selection does not add language coverage. Spanish/French reads use their bundled pack instead of English or custom rules. See [rules](rules.md) for scope and limits.
 
-## Known limits
+## Automatic mode
 
-- ClauseWatch reads what the page and its linked documents say in text. A PDF, an image of the terms, or a page that shows its text only after you sign in cannot be read; the report says so.
-- ClauseWatch never reads a local or private network address (`localhost`, IP addresses, `.local`, `.internal` and the like), and a link that redirects to another site is not used. A known service's redirects between its own domains are followed, so a scan of one asks for access to all of them.
-- Text in a cookie or consent banner, or in a dialog over the page, is not part of the document and is never quoted.
-- Some services block any request that does not come from a full browser visit (a bot check), or are too large to read (more than 2 MB). Those documents show **Could not read**, with the reason; open them in a tab and use **check selected text** instead.
-- **Firefox:** Firefox loads every address an extension asks for over https, so a terms page available only over plain http cannot be read there. Firefox also cannot give an extension access to an address with a port number (`https://service.example:8443/terms`), so Scan a link cannot read one. Both work in Chrome, Edge and Opera.
+Enable it in **Settings → General** and grant site access. It recognises email/new-password fields or consent checkboxes without reading field values. It also supports sibling field containers, open shadow roots and permitted web iframes. Each iframe reads its own site's policies and displays its card inside that frame. Closed roots and restricted or opaque-origin frames are unsupported.
 
-## What ClauseWatch never does
+On known sign-up URLs the card can appear without a form. Single-page-app navigation and relevant field/visibility changes are observed. A login-only form is not meant to trigger a sign-up card.
 
-No account, no telemetry, no browsing history, no reading what you type. See [PRIVACY.md](PRIVACY.md).
+- **Try again** retries failed reads while reusing successful cached documents. Failures do not quiet a site for a week.
+- A complete terms-and-privacy read quiets the site for a week and shows a dot on the toolbar icon. The toolbar can reopen the site's cached report and offer a fresh check.
+- Closing a loading card keeps it closed for that route after reading finishes.
+- **Don't show on this site** mutes the site. Use **Settings → Sites → Show again** to undo that choice.
+- Turning automatic mode off, or removing its broad site access, stops already-injected scripts and pending automatic reads.
+
+## Saved reports and policy changes
+
+### Reopen a report
+
+**Latest report** retains the most recently displayed web-policy report's quotes, context, sources, coverage and original rules version for seven days. It does not keep a separate full-document body. Reopening does not extend retention. **Check again** asks for permission for a fresh scan. Pasted and selected text are not archived as this saved web report; an oversized report may be omitted.
+
+### Change badges
+
+**Recently checked** keeps up to ten sites and fingerprints for up to twenty source documents per site. It compares the same document type and canonical URL, including query and fragment. A different address starts a separate baseline. A changed badge expires after thirty days from that document's change, including when history is displayed without another scan. The recent-site entry itself can remain until displaced by another site.
+
+### Compare policy text
+
+**Policy changes (local, optional)** is off by default. Enable **Keep policy versions on this device**, then use **Compare and remember this version** after a scan with full policy text available.
+
+It keeps up to two versions per source, three sources total, with at most 100,000 characters per version and thirty-day retention per saved version. Pasted text, empty-body saved reports and oversized versions are not saved. The comparison shows exact added/removed paragraphs, source URL and read dates. It does not classify reordered or repeated paragraphs as edits, or interpret their legal significance. Different URLs retain separate baselines.
+
+**Delete saved policy versions** removes the text and disables comparisons. Expired versions are cleaned when the worker starts and on its fifteen-minute tick, when the browser is running.
+
+## Save, print and diagnose
+
+**Save or print this report** previews a plain-text report with source URLs, read dates, rule version, coverage, rule findings and their context. Use **Download plain-text report** or **Print report**. AI suggestions are not included. Review quotes and full URLs before sharing; a source URL may contain private parameters.
+
+**Export local diagnostics → Prepare diagnostic preview** shows result states, broad failure categories, coverage, counts and scan timing. It excludes policy text, quotes, HTML, URLs, settings and API credentials. Choose **Download diagnostics** only if you want a local file. ClauseWatch does not upload it or contact support automatically.
+
+## AI help
+
+The rules always run first. AI controls appear only after AI help is enabled in Settings.
+
+- **Look for clauses the rules missed (AI)** checks documents whose full text is available in the open report. Accepted findings are complete source units, preserving source wording, conditions and negation. Generated explanations are omitted. The topic remains an AI suggestion that can be wrong.
+- **Summarise the quotes (AI)** selects up to four complete source sentences from the actual cited quotes. It rejects paraphrases and unsupported claims, even with valid citation numbers. **Show cited quotes** displays their full supporting text. It is a selection, not full document coverage.
+
+Coverage and batch count appear before analysis. Long documents use sequential batches of at most 24,000 source characters, with sentence overlap where it fits. Oversized sentences and unterminated fragments are omitted and coverage is shown. A batch being submitted does not guarantee the model finds every relevant clause.
+
+Each request has a 90-second deadline. **Cancel AI request** stops the request and later batches. **Retry AI request** resumes unfinished analysis batches within the open report; summary retries can resend their inputs. Closing or replacing the report cancels requests and discards temporary analysis checkpoints. Built-in model sessions are destroyed on completion or cancellation.
+
+In **Settings → AI help**, choose a model and endpoint for your own key. Changing the API address or path clears its credential selection. Enter a new key or explicitly choose the saved key for the new destination before saving. Requests refuse binding mismatches and do not follow redirects. Changing AI settings cancels requests in open reports; reopen the report to use the new settings. Endpoint query strings, fragments and embedded credentials are not accepted.
+
+## Rules, sharing and data requests
+
+**Settings → Rules** offers **ClauseWatch rules**, **My rules** and **Import**. Test and save uses the real scanner and minimum quote length. All saved custom rules, including disabled ones, share the 200-rule and 600-pattern limits. Skipped rules are identified. Concurrent Settings pages submit individual edits through the background queue. See [rules](rules.md).
+
+**Copy quote & share** copies the quote, source and project link. The popup's **Share** menu shares the ClauseWatch project link. You choose where to send either; the extension does not send messages for you.
+
+**Ask them to delete my data** drafts an erasure, access or account-closure request. Review its recipient and account details, then send it through your own email program. GDPR drafts use “without undue delay” and one calendar month, with permitted-extension and notification wording. CCPA drafts use a separate 45-day period. A template does not determine which law applies to a particular request.
+
+## Limits and troubleshooting
+
+| Problem | What to try |
+|---|---|
+| Document name not recognised | Choose Terms or Privacy manually, then read it; confirm that it is the actual policy. |
+| Scripts, a bot check or sign-in hide the policy | Open it yourself, complete the site's steps, then use **Read visible policy**. |
+| An external host or hidden redirect is refused | Open the final policy URL yourself and scan that address or its visible tab. |
+| Image-only or password-protected PDF | Obtain an accessible text version or paste/select text after opening it yourself. |
+| Request timeout or excessive size | Open the policy directly, or read/select the relevant visible text. Partial downloads are not reported as complete policies. |
+| No highlight | Copy the quote and search the source. |
+| AI request fails | Check Settings and the selected credential, then use explicit retry. Saved quote reports have no full body for new-document AI analysis. |
+| Expired scan or missing saved report | Run a fresh scan; retaining a screen does not extend its data lifetime. |
+
+Address checks reject IP literals and recognised local/private hostnames; they do not perform DNS-level private-network validation. Browser network protections still apply. Downloaded HTML cannot verify visibility that depends on external styles or scripts; those reports are labelled. Banner filtering uses structural heuristics and is not a guarantee that every banner is excluded. Manual tab snapshots do not traverse iframes, even though automatic form detection can run inside permitted frames.
+
+Firefox permission prompts, plain-HTTP addresses, custom ports, model availability and browser text highlighting need testing in the target browser. Do not assume Chromium test results cover every Firefox or mobile behaviour. Full data handling is described in [privacy](PRIVACY.md).

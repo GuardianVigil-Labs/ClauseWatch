@@ -41,3 +41,13 @@ func TestReportsDisagreementAndGoOnlyErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestAssertionScopes(t *testing.T) {
+	dir := write(t,
+		`{"flags":"i","rules":[{"id":"sale","scope":"assertion","all":["sell","personal data"],"none":["not"]}]}`,
+		`{"fixtures":{"sale":{"match":["We do not sell shoes, but we sell personal data to partners."],"noMatch":["We do not sell personal data to partners."]}}}`)
+	problems, err := check(dir)
+	if err != nil || len(problems) != 0 {
+		t.Fatalf("err=%v problems=%v", err, problems)
+	}
+}

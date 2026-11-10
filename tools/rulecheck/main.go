@@ -12,14 +12,16 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 )
 
 type rulesFile struct {
 	Flags string `json:"flags"`
 	Rules []struct {
-		ID   string   `json:"id"`
-		All  []string `json:"all"`
-		None []string `json:"none"`
+		ID    string   `json:"id"`
+		Scope string   `json:"scope"`
+		All   []string `json:"all"`
+		None  []string `json:"none"`
 	} `json:"rules"`
 }
 
@@ -77,6 +79,10 @@ func check(dir string) ([]string, error) {
 	seen := map[string]bool{}
 	for _, r := range rf.Rules {
 		seen[r.ID] = true
+		if r.Scope != "" && r.Scope != "assertion" {
+			problems = append(problems, fmt.Sprintf("%s: unknown match scope", r.ID))
+			continue
+		}
 		all, none := compile(r.ID, r.All), compile(r.ID, r.None)
 		if len(all) != len(r.All) || len(none) != len(r.None) {
 			continue
@@ -87,12 +93,12 @@ func check(dir string) ([]string, error) {
 			continue
 		}
 		for _, s := range fx.Match {
-			if !matches(all, none, s) {
+			if !matchesScoped(all, none, s, r.Scope) {
 				problems = append(problems, fmt.Sprintf("%s: should match %q", r.ID, s))
 			}
 		}
 		for _, s := range fx.NoMatch {
-			if matches(all, none, s) {
+			if matchesScoped(all, none, s, r.Scope) {
 				problems = append(problems, fmt.Sprintf("%s: should not match %q", r.ID, s))
 			}
 		}
@@ -126,4 +132,32 @@ func readJSON(path string, v any) error {
 		return err
 	}
 	return json.Unmarshal(b, v)
+}
+
+var denial = regexp.MustCompile(`(?i)\bnot\b|\bnever\b|\bcannot\b|\b(don|doesn|won|can)['’]t\b`)
+var contrast = regexp.MustCompile(`(?i)\b(?:but|however|yet|except(?:\s+that)?)\b|\band\s+(we|our\s+company)\b`)
+
+func matchesScoped(all, none []*regexp.Regexp, s, scope string) bool {
+	if matches(all, none, s) {
+		return true
+	}
+	if scope != "assertion" || !denial.MatchString(s) {
+		return false
+	}
+	start := 0
+	for _, cut := range contrast.FindAllStringSubmatchIndex(s, -1) {
+		part := strings.TrimSpace(s[start:cut[0]])
+		if part != "" && matches(all, none, part) {
+			return true
+		}
+		start = cut[1]
+		if cut[2] >= 0 {
+			start = cut[2]
+		}
+	}
+	part := strings.TrimSpace(s[start:])
+	if part != "" && matches(all, none, part) {
+		return true
+	}
+	return false
 }

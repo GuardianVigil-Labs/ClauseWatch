@@ -6,15 +6,18 @@
         "Content you upload may be used to develop artificial intelligence features.",
         "You grant us the right to use user inputs to train AI models.",
         "Nothing in these terms prevents us from using your content to train our machine learning models.",
-        "We prohibit users from using automated tools, and we use your content to train and improve our AI models."
+        "We prohibit users from using automated tools, and we use your content to train and improve our AI models.",
+        "We do not require consent and may use your content to train our AI models.",
+        "We do not use your content for advertising, but we may use your content to train our AI models."
       ],
       "noMatch": [
         "We do not use your content to train our AI models.",
         "We will never train models on customer data.",
         "Our engineers train regularly to improve the service.",
-        "We don’t use your content to train our AI models.",
+        "We don\u2019t use your content to train our AI models.",
         "We restrict our AI vendors from training their models on your content or inputs.",
-        "We restrict our AI service providers from training their models on content our customers upload."
+        "We restrict our AI service providers from training their models on content our customers upload.",
+        "We do not train our AI models on your content and we do not sell any personal data."
       ]
     },
     "binding-arbitration": {
@@ -39,11 +42,15 @@
     "changes-without-notice": {
       "match": [
         "We may modify these Terms at any time without notice.",
-        "The Company may change this agreement with or without notice."
+        "The Company may change this agreement with or without notice.",
+        "We do not charge fees, but we may change these terms without notice."
       ],
       "noMatch": [
         "We will notify you 30 days before we change these Terms.",
-        "If we update this policy we will email you in advance."
+        "If we update this policy we will email you in advance.",
+        "We will not change these terms without notice to you.",
+        "We never modify this agreement without prior notice to account holders.",
+        "These terms are not changed without prior notice to you."
       ]
     },
     "class-action-waiver": {
@@ -86,7 +93,12 @@
       "match": [
         "We may sell personal information to our partners.",
         "Personal data may be rented or sold to advertisers.",
-        "Sharing your information with these partners may be considered a sale of personal information under applicable law."
+        "Sharing your information with these partners may be considered a sale of personal information under applicable law.",
+        "We may sell personal data to advertisers unless you opt out.",
+        "We do not sell personal data, except that we sell personal data to advertising partners.",
+        "We do not charge users and we may sell personal data to advertising partners.",
+        "Our advertising partners may sell personal data to other advertisers unless you opt out.",
+        "We do not sell personal data overseas and we may sell personal data to local advertisers."
       ],
       "noMatch": [
         "We do not sell your personal information.",
@@ -96,15 +108,20 @@
         "We may share personal data with a buyer during the sale or merger of all or part of our business.",
         "State law gives you the right to know whether we sell personal information and to opt out of any sales.",
         "You can opt out of the sale of personal data for targeted advertising.",
-        "You agree not to sell or transfer the personal data of others, for example by selling your contact list."
+        "You agree not to sell or transfer the personal data of others, for example by selling your contact list.",
+        "We do not sell personal data, but we may share anonymous statistics with partners.",
+        "We never sell personal information to advertisers, even if you do not opt out.",
+        "We do not currently sell personal information to any advertising partners."
       ]
     },
     "shares-with-data-brokers": {
       "match": [
-        "We share information with data brokers and marketing partners."
+        "We share information with data brokers and marketing partners.",
+        "We do not charge subscription fees and we share personal information with data brokers."
       ],
       "noMatch": [
-        "We do not share information with data brokers."
+        "We do not share information with data brokers.",
+        "We do not share personal information with data brokers, even for a fee."
       ]
     },
     "retains-data-after-closure": {
@@ -114,7 +131,8 @@
         "We store copies of your data following termination of your account.",
         "Even if you delete your account, some information may remain in our systems for legal and business purposes.",
         "Following deactivation of your profile, your posts may remain visible to other users.",
-        "Comments you made in public forums will stay visible after your account is closed."
+        "Comments you made in public forums will stay visible after your account is closed.",
+        "We do not charge a closure fee and we may retain your data after you close your account."
       ],
       "noMatch": [
         "We do not retain your information after you close your account.",
@@ -122,12 +140,13 @@
         "You can keep your account open after the trial ends.",
         "After you close your account, we delete your personal data and keep no copies.",
         "We are not able to retain your files after your account is closed.",
-        "We don’t keep your data after you close your account.",
+        "We don\u2019t keep your data after you close your account.",
         "You stay signed in after closing the app, and you can delete your account data from settings.",
         "We retain your personal data only while your account is active and delete it after you close your account.",
         "Your files are stored while your account is open and permanently deleted after account closure.",
         "Once you close your account, your personal data is no longer retained.",
-        "After your account is deleted, no personal information is kept."
+        "After your account is deleted, no personal information is kept.",
+        "We do not retain your personal data after you close your account."
       ]
     },
     "shares-data-for-advertising": {
@@ -143,7 +162,7 @@
         "We do not share your personal information with advertisers.",
         "We never disclose your data to ad networks.",
         "Advertisers may share their own content on our platform.",
-        "We don’t share your personal information with advertisers.",
+        "We don\u2019t share your personal information with advertisers.",
         "Your personal information is not shared with advertisers or ad networks.",
         "Your personal data is never shared with advertising partners.",
         "Your personal information will not be shared or disclosed to ad networks.",
@@ -156,7 +175,9 @@
         "Plans auto-renew and you will be charged the then-current price.",
         "We will bill you on a recurring basis until you cancel.",
         "Unless you cancel, your membership continues and we will charge your payment method each month.",
-        "Subscriptions auto‑renew at the then-current rate."
+        "Subscriptions auto\u2011renew at the then-current rate.",
+        "Your subscription renews automatically and we will send a reminder before billing.",
+        "We remind you before your subscription automatically renews at the current price."
       ],
       "noMatch": [
         "Your subscription will not renew automatically.",
@@ -165,16 +186,18 @@
         "Automatic renewal is off by default, and you will be asked before any further billing.",
         "Prepaid plans expire at the end of the term and are not automatically renewed.",
         "We send you an automatic email receipt after each one-time purchase is billed.",
-        "We don’t automatically renew your subscription.",
+        "We don\u2019t automatically renew your subscription.",
         "Subscriptions do not auto-renew and you will not be charged again.",
-        "There is no automatic renewal or recurring billing."
+        "There is no automatic renewal or recurring billing.",
+        "We send an automatic reminder before your one-time purchase is billed."
       ]
     },
     "cancellation-notice-period": {
       "match": [
         "You must cancel at least 30 days before your renewal date to avoid being charged.",
         "Cancellation requests must be received no later than 7 business days prior to the billing date.",
-        "To avoid being charged for the next term, you must give us written notice of cancellation thirty days in advance."
+        "To avoid being charged for the next term, you must give us written notice of cancellation thirty days in advance.",
+        "We do not offer phone support and you must cancel at least thirty days before renewal."
       ],
       "noMatch": [
         "You can cancel at any time and your plan ends at the end of the period.",
@@ -184,11 +207,12 @@
         "If you cancel within 14 days of purchase, before using the service, you get a full refund.",
         "To stop the next charge, cancel before the renewal date.",
         "We will remind you at least 7 days before your trial ends so you can cancel.",
-        "We may cancel events with at least 24 hours’ notice, and you will receive a full refund.",
+        "We may cancel events with at least 24 hours\u2019 notice, and you will receive a full refund.",
         "We will notify you at least 30 days before any price change, and you may cancel before it takes effect.",
         "We will notify you at least 30 days before your renewal date so you can cancel.",
         "You may cancel at any time before your renewal date, and we delete your data within 30 days.",
-        "If you cancel before the end of your 14-day free trial, we refund your payment within 5 business days."
+        "If you cancel before the end of your 14-day free trial, we refund your payment within 5 business days.",
+        "You do not need to cancel thirty days before renewal because plans expire automatically."
       ]
     },
     "limits-liability": {
@@ -241,7 +265,8 @@
       "match": [
         "We may collect personal information from children under 13 with parental consent.",
         "Information from minors who use the service is processed to personalise content.",
-        "We use data about kids' activity to recommend games."
+        "We use data about kids' activity to recommend games.",
+        "We do not charge parents and we collect personal information from children with parental consent."
       ],
       "noMatch": [
         "Our service is not directed at children, and we do not knowingly collect their data.",
@@ -250,7 +275,8 @@
         "If you are under 13 you may not use the service or provide us with any information.",
         "Children under 13 must not use the service, and parents should supervise any information they share.",
         "If you believe we have collected personal information from a child under 13, please contact us immediately.",
-        "No personal information is knowingly collected from children under 13."
+        "No personal information is knowingly collected from children under 13.",
+        "We do not knowingly collect any personal data from children under thirteen."
       ]
     },
     "collects-location-or-biometrics": {
@@ -258,7 +284,8 @@
         "We collect precise location data from your device to provide nearby offers.",
         "The app may access your GPS position even when it is closed.",
         "We process biometric identifiers such as face geometry to verify your identity.",
-        "We may create a template of your facial features to verify your identity when you sign in."
+        "We may create a template of your facial features to verify your identity when you sign in.",
+        "We do not charge for access and we collect precise location data to provide nearby offers."
       ],
       "noMatch": [
         "We do not collect biometric data.",
@@ -266,7 +293,8 @@
         "Enter your town to see the local weather.",
         "We use your location only with your permission, and you can turn location data off at any time.",
         "Face ID data stays on your device, and the app cannot access your biometric information.",
-        "We don’t collect your precise location or any biometric data."
+        "We don\u2019t collect your precise location or any biometric data.",
+        "We never collect biometric information or precise location data from users."
       ]
     },
     "terminate-without-reason": {
@@ -277,7 +305,8 @@
         "We reserve the right to remove your access to the service at our sole discretion.",
         "We may terminate your account at any time, for any reason, including if you withdraw consent.",
         "If you revoke your consent, we may suspend your access to the service at any time.",
-        "We may close your account at any time if you withdraw your consent to processing."
+        "We may close your account at any time if you withdraw your consent to processing.",
+        "We do not charge an account fee and we may terminate your account at any time without notice."
       ],
       "noMatch": [
         "You may close your account at any time from the settings page.",
@@ -291,7 +320,19 @@
         "You are free to delete your account at any time.",
         "Users may close or delete their accounts at any time.",
         "You can deactivate your account at any time from your profile settings.",
-        "You can revoke your consent at any time, though some features of the service may then stop working."
+        "You can revoke your consent at any time, though some features of the service may then stop working.",
+        "We will not terminate your account at any time without prior notice to you."
+      ]
+    },
+    "conditional-data-sale": {
+      "match": [
+        "We do not sell personal data except to advertising partners under the conditions described here.",
+        "We do not sell personal information except with your consent when you enable partner offers."
+      ],
+      "noMatch": [
+        "We do not sell personal data to advertisers or any other partners.",
+        "We do not sell personal data except to explain why we prohibit such sales.",
+        "You do not sell personal data except with your consent when using the service."
       ]
     }
   },

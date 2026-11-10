@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import rulesFile from "../rules/rules.json";
 import { compileRules, type RulesFile } from "../src/engine/rules";
-import { asAddress, fetchTargets, foundCount, freshPending, isOwnText, MAX_PASTED, readFetched, readFirst, recordRecent, scanAddress, scanOrigins, scanPasted, scanTargets, scanText, scanUrl, PENDING_TTL_MS } from "../src/ui/scan";
+import { asAddress, fetchTargets, foundCount, freshPending, isOwnText, MAX_PASTED, readFetched, readFirst, recordRecent, recentHistory, scanAddress, scanOrigins, scanPasted, scanTargets, scanText, scanUrl, PENDING_TTL_MS } from "../src/ui/scan";
 import type { KnownSite } from "../src/engine/known-sites";
 import type { DocumentResult } from "../src/engine/documents";
 
@@ -64,7 +64,7 @@ describe("Scan a link", () => {
   it("reads pasted text as whichever document it says it is, or asks", () => {
     expect(scanPasted(terms, "auto", rules).documents.map((d) => [d.kind, d.status])).toEqual([["terms", "read"]]);
     expect(scanPasted(filler, "auto", rules).documents[0]).toMatchObject({ status: "could_not_read" });
-    expect(scanPasted(terms, "privacy", rules).documents[0]).toMatchObject({ kind: "privacy", status: "could_not_read" });
+    expect(scanPasted(terms, "privacy", rules).documents[0]).toMatchObject({ kind: "privacy", status: "read", notices: [expect.stringContaining("You chose")] });
   });
 
   const known: KnownSite[] = [{ id: "service", name: "Service", domains: ["service.example"], terms: "https://legal.service.example/terms", privacy: "https://policies.other.example/service-privacy" }];
@@ -150,6 +150,30 @@ describe("recently checked sites", () => {
     for (let i = 0; i < 12; i++) list = await recordRecent(list, `s${i}.example`, []);
     expect(list).toHaveLength(10);
     expect(list[0]!.site).toBe("s11.example");
+  });
+
+  it("expires badges on display and compares only the same source identity", async () => {
+    const t = new Date("2026-01-01T00:00:00Z");
+    let list = await recordRecent([], "service.example", [read("one")], t);
+    list = await recordRecent(list, "service.example", [read("two")], t);
+    expect(recentHistory(list, t.getTime() + 30 * 864e5 - 1)[0]!.changed).toEqual(["terms"]);
+    expect(recentHistory(list, t.getTime() + 30 * 864e5)[0]!.changed).toEqual([]);
+    expect(list[0]!.changed).toEqual(["terms"]);
+    list = await recordRecent([], "service.example", [read("one")], t);
+    const other = { ...read("unrelated text"), url: "https://service.example/product-b/terms" };
+    list = await recordRecent(list, "service.example", [other], t);
+    expect(list[0]!.changed).toEqual([]);
+    list = await recordRecent(list, "service.example", [read("one")], t);
+    expect(list[0]!.changed).toEqual([]);
+    list = await recordRecent(list, "service.example", [read("two")], t);
+    expect(list[0]!.changed).toEqual(["terms"]);
+    const legacy = [{ ...list[0]!, documents: undefined, changedAt: "invalid" }];
+    expect(recentHistory(legacy, t.getTime())[0]!.changed).toEqual([]);
+  });
+
+  it("does not treat a legacy kind-only fingerprint as evidence of a revision", async () => {
+    const list = await recordRecent([{ site: "service.example", at: "", hashes: { terms: "legacy-hash" }, changed: [] }], "service.example", [read("new baseline")]);
+    expect(list[0]!.changed).toEqual([]);
   });
 
   it("keeps a change noted for exactly 30 days, and never fingerprints a report without its text", async () => {

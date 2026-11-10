@@ -20,10 +20,29 @@ export function isEmailField(i: HTMLInputElement): boolean {
 
 function labelText(i: HTMLInputElement): string {
   const own = i.labels ? [...i.labels].map((l) => l.textContent ?? "").join(" ") : "";
-  return `${own} ${i.getAttribute("aria-label") ?? ""} ${i.closest("label")?.textContent ?? ""}`;
+  const root = i.getRootNode() as Document | ShadowRoot;
+  const labelled = (i.getAttribute("aria-labelledby") ?? "").split(/\s+/).map((id) => root.getElementById(id)?.textContent ?? "").join(" ");
+  return `${own} ${labelled} ${i.getAttribute("aria-label") ?? ""} ${i.closest("label")?.textContent ?? ""}`;
 }
 
-const visible = (el: HTMLElement) => !el.hidden && el.getAttribute("aria-hidden") !== "true" && el.closest("[hidden]") === null;
+function visible(el: HTMLElement): boolean {
+  for (let node: HTMLElement | null = el; node;) {
+    const css = getComputedStyle(node);
+    if (node.hidden || node.inert || node.getAttribute("aria-hidden")?.toLowerCase() === "true" || css.display === "none" || css.visibility === "hidden" || css.visibility === "collapse" || css.contentVisibility === "hidden" || css.opacity === "0") return false;
+    const root = node.getRootNode();
+    node = node.assignedSlot ?? node.parentElement ?? (root instanceof ShadowRoot ? root.host as HTMLElement : null);
+  }
+  return true;
+}
+
+/** Open roots only; closed roots belong to the page and cannot be inspected. */
+export function signupRoots(doc: Document): (Document | ShadowRoot)[] {
+  const roots: (Document | ShadowRoot)[] = [doc];
+  for (let i = 0; i < roots.length; i++) {
+    for (const el of roots[i]!.querySelectorAll("*")) if (el.shadowRoot) roots.push(el.shadowRoot);
+  }
+  return roots;
+}
 
 /** The smallest ancestor holding both elements. */
 function commonRoot(a: HTMLElement, b: HTMLElement): HTMLElement {
@@ -37,26 +56,37 @@ function commonRoot(a: HTMLElement, b: HTMLElement): HTMLElement {
  * consent checkbox, no "new-password" hint) is not one: signing in is not
  * agreeing to anything new.
  */
-export function findSignupForms(doc: Document): SignupForm[] {
+export function findSignupForms(doc: Document | ShadowRoot): SignupForm[] {
   const out: SignupForm[] = [];
   const seen = new Set<HTMLElement>();
   const inputs = [...doc.querySelectorAll<HTMLInputElement>("input")].filter(visible);
   const passwords = inputs.filter((i) => i.type === "password");
   const consents = inputs.filter((i) => i.type === "checkbox" && CONSENT_WORDS.test(labelText(i)));
+  const grouped = new Set<HTMLInputElement>();
 
   for (const pw of passwords) {
-    const root = (pw.form as HTMLElement | null) ?? pw.parentElement?.closest<HTMLElement>("section, div, main, body") ?? doc.body;
-    const fields = inputs.filter((i) => root.contains(i));
+    // Search successive containers: field wrappers commonly are siblings.
+    // Never combine fields from separate explicit forms.
+    let container = pw.parentElement;
+    while (!pw.form && container && !inputs.some((i) => !i.form && isEmailField(i) && container!.contains(i))) {
+      if (container.matches("section, article, aside, main")) break;
+      container = container.parentElement;
+    }
+    const fallback = doc instanceof ShadowRoot ? doc.host as HTMLElement : doc.body;
+    const root = (pw.form as HTMLElement | null) ?? container ?? fallback;
+    const fields = inputs.filter((i) => (root === fallback && doc instanceof ShadowRoot ? true : root.contains(i)) && i.form === pw.form);
     const email = fields.find(isEmailField) ?? null;
-    const newPassword = fields.some((i) => i.autocomplete === "new-password") || fields.filter((i) => i.type === "password").length > 1;
-    const consent = consents.some((c) => root.contains(c));
+    const newPassword = fields.some((i) => /\bnew-password\b/.test(i.autocomplete)) || fields.filter((i) => i.type === "password").length > 1;
+    const consent = consents.some((c) => fields.includes(c));
     if (!email || !(newPassword || consent)) continue;
+    fields.forEach((i) => grouped.add(i));
     if (!seen.has(root)) {
       seen.add(root);
       out.push({ root, email });
     }
   }
   for (const c of consents) {
+    if (grouped.has(c)) continue;
     if (out.some((f) => f.root.contains(c))) continue;
     const root = (c.form as HTMLElement | null) ?? commonRoot(c, c.closest("section, div, main") ?? c);
     if (seen.has(root)) continue;

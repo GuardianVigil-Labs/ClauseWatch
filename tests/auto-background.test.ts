@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { cachedDocs, docsStale, mayFetch, readKey, rememberDocs, rememberIfCurrent } from "../src/auto/background";
+import { cachedDocs, completeDocs, docsStale, mayFetch, pruneDocs, readKey, rememberDocs, rememberIfCurrent } from "../src/auto/background";
 import rulesFile from "../rules/rules.json";
 import { compileRules, type RulesFile } from "../src/engine/rules";
 import { loadRules } from "../src/engine/rule-set";
@@ -35,7 +35,31 @@ describe("document cache", () => {
     expect(got).toHaveLength(1);
     expect(got![0]).toMatchObject({ status: "read", body: "" });
     expect(await cachedDocs(kv, "s.example", 1000 + 7 * 864e5 + 1)).toBeNull();
+    expect(mem.has("docs:s.example")).toBe(false);
     expect(await cachedDocs(kv, "other.example", 2000)).toBeNull();
+  });
+  it("quiets only complete reads, not partial results or duplicate document kinds", () => {
+    expect(completeDocs([doc, { kind: "privacy", status: "could_not_read", reason: "Try again." }])).toBe(false);
+    expect(completeDocs([doc, doc])).toBe(false);
+    expect(completeDocs(null)).toBe(false);
+    expect(completeDocs([doc, { ...doc, kind: "privacy" }])).toBe(true);
+  });
+  it("retries do not extend the retention of reused quotes", async () => {
+    await rememberDocs(kv, "retry.example", [doc], 1000, "k");
+    await rememberDocs(kv, "retry.example", [doc, { ...doc, kind: "privacy" }], 5000, "k");
+    expect(mem.get("docs:retry.example")).toMatchObject({ at: 1000 });
+    expect(await cachedDocs(kv, "retry.example", 1000 + 7 * 864e5, "k")).toBeNull();
+  });
+  it("sweeps expired, malformed and future-dated quotes without touching settings or fresh entries", async () => {
+    const now = 9 * 864e5;
+    mem.clear();
+    mem.set("automatic", true);
+    mem.set("docs:old.example", { at: 0, documents: [doc] });
+    mem.set("docs:bad.example", { at: "bad", documents: [doc] });
+    mem.set("docs:future.example", { at: now + 1, documents: [doc] });
+    await rememberDocs(kv, "fresh.example", [doc], now);
+    await pruneDocs(kv, Object.fromEntries(mem), now);
+    expect([...mem.keys()].sort()).toEqual(["automatic", "docs:fresh.example"]);
   });
   it("does not reuse documents read before the person's rules changed", async () => {
     const store = new Map<string, unknown>();
@@ -187,20 +211,12 @@ describe("redirects within a known site", () => {
     vi.unstubAllGlobals();
   });
 
-  it("says a redirect was blocked when the browser would not follow it", async () => {
+  it("does not follow a redirect whose destination the browser hides", async () => {
     const { fetchText, BLOCKED_REASON } = await import("../src/auto/background");
-    const fetchMock = vi.fn().mockRejectedValueOnce(new TypeError("NetworkError")).mockResolvedValueOnce({ type: "opaqueredirect", status: 0 });
+    const fetchMock = vi.fn().mockResolvedValue({ type: "opaqueredirect", status: 0 });
     vi.stubGlobal("fetch", fetchMock);
     expect(await fetchText("https://www.service.example/terms")).toEqual({ ok: false, reason: BLOCKED_REASON });
-    expect(fetchMock).toHaveBeenLastCalledWith("https://www.service.example/terms", { credentials: "omit", redirect: "manual" });
-    for (const status of [300, 302, 399]) {
-      vi.stubGlobal("fetch", vi.fn().mockRejectedValueOnce(new TypeError("NetworkError")).mockResolvedValueOnce({ type: "basic", status }));
-      expect(await fetchText("https://www.service.example/terms")).toEqual({ ok: false, reason: BLOCKED_REASON });
-    }
-    for (const status of [200, 299, 400]) {
-      vi.stubGlobal("fetch", vi.fn().mockRejectedValueOnce(new TypeError("NetworkError")).mockResolvedValueOnce({ type: "basic", status }));
-      expect(await fetchText("https://www.service.example/terms")).toEqual({ ok: false, reason: "The page could not be reached." });
-    }
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith("https://www.service.example/terms", { credentials: "omit", redirect: "manual", signal: expect.any(AbortSignal) });
     vi.unstubAllGlobals();
   });
 });

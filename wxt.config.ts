@@ -66,6 +66,9 @@ export default defineConfig({
     // The licence travels with the installed extension, not only the source zip.
     "build:publicAssets": (wxt, assets) => {
       for (const f of ["LICENSE", "NOTICE"]) assets.push({ absoluteSrc: resolve(wxt.config.root, f), relativeDest: f });
+      for (const [pkg, file] of [["tldts", "LICENSE"], ["tldts-core", "LICENSE"], ["tinyld", "license"], ["pdfjs-dist", "LICENSE"]]) {
+        assets.push({ absoluteSrc: resolve(wxt.config.root, "node_modules", pkg!, file!), relativeDest: `licenses/${pkg}.txt` });
+      }
     },
   },
 });

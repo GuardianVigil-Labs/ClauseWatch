@@ -93,12 +93,12 @@ describe("reading, at the edges", () => {
     expect(sameSite("legal.service.co.uk", "service.co.uk")).toBe(true);
     expect(sameSite("other.co.uk", "service.co.uk")).toBe(false);
   });
-  it("reads exactly 300 words as a document, and not 299", () => {
+  it("reads short policies at the minimum readable length, and rejects less", () => {
     const words = (n: number) => `Terms of Service ${Array.from({ length: n - 3 }, (_, i) => `word${i}`).join(" ")}`;
-    expect(readDocument("terms", "", words(300), "text/plain", rules).status).toBe("read");
-    expect(readDocument("terms", "", words(299), "text/plain", rules).status).toBe("could_not_read");
-    expect(kindsOfPage(`<p>${words(300)}</p>`)).toEqual(["terms"]);
-    expect(kindsOfPage(`<p>${words(299)}</p>`)).toEqual([]);
+    expect(readDocument("terms", "", words(8), "text/plain", rules).status).toBe("read");
+    expect(readDocument("terms", "", words(7), "text/plain", rules).status).toBe("could_not_read");
+    expect(kindsOfPage(`<p>${words(8)}</p>`)).toEqual(["terms"]);
+    expect(kindsOfPage(`<p>${words(7)}</p>`)).toEqual([]);
   });
   it("does not read a file that is neither a web page nor plain text", () => {
     expect(readDocument("terms", "", page("Terms of Service"), "application/pdf", rules)).toMatchObject({ status: "could_not_read", reason: expect.stringContaining("PDF") });

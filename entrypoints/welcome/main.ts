@@ -64,7 +64,7 @@ async function aiChoices() {
     "My own AI key",
     "An OpenAI-compatible service you choose. You enter the key in Settings.",
     current.mode === "key",
-    { leaves: { what: "some", text: "what you ask about, sent to that service under your account: the text being checked (the document, or the text you pasted or selected, up to 24,000 characters) when you ask AI to look for missed clauses, or only the quotes found for a summary. Never your form entries, passwords, cookies or browsing history." } },
+    { leaves: { what: "some", text: "what you ask about, sent to that service under your account: the text being checked (the document, or the text you pasted or selected, in sequential batches of up to 24,000 source characters each) when you ask AI to look for missed clauses, or only the quotes found for a summary. Never your form entries, passwords, cookies or browsing history." } },
   );
   aiBox.append(key.label);
 }

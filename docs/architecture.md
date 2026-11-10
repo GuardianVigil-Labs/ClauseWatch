@@ -1,61 +1,100 @@
 # Architecture
 
-How the extension is built. ClauseWatch is a Manifest V3 extension written in TypeScript and built with [WXT](https://wxt.dev). It has no server: everything below runs in the browser.
+ClauseWatch is a Manifest V3 extension written in TypeScript and built with WXT. It has no application server. This document describes the current source checkout; see [development](development.md) for setup and checks, and [the reader contract](reader.md) for extraction and matching details.
 
-## Entry points (`entrypoints/`)
+## Entry points and ownership
 
-| Entry point | Role |
+| Entry point | Responsibility |
 |---|---|
-| `background.ts` | The service worker. Runs the daily rules check (an alarm every 15 minutes, a download at most once a day), registers automatic mode's content script only while automatic mode is on and its site access is granted, finishes **Scan a link** after the permission prompt closes the popup, and handles the two right-click items. It reads no page and observes no browsing: pages reach it only as messages from the extension's own pages and scripts, or a right-click. |
-| `popup/` | The toolbar popup: **This site** (reads the current tab after a click, through `activeTab`) and **Scan a link** (an address or pasted text). Shows the report, sharing, data requests and the recently checked list. |
-| `options/` | Settings: General, AI help, Rules, Sites, Privacy, About. `rules.ts` is the Rules pane (switching signed rules off, writing, importing and exporting own rules). |
-| `welcome/` | First-run setup: AI help and when ClauseWatch appears. Opened once on install, and again from Settings. |
-| `signup.content.ts` | Automatic mode's content script. Recognises sign-up and consent forms by their fields (never what is typed), and shows the card in a closed shadow root when the user starts filling one in, or as soon as a known site's sign-up page opens. |
+| `entrypoints/background.ts` | Signed-rule refresh, runtime content-script registration, permission-scoped downloads, scan recovery/expiry, menus and serialized settings/version edits. |
+| `entrypoints/popup/` | Toolbar and persistent-tab views; policy discovery, rendered snapshots, HTML/PDF interpretation, report tools, saved reports and recovery controls. |
+| `entrypoints/options/` | General, AI, Rules, Sites, Privacy and About settings. Rule changes are operations sent to the background rather than writes of stale UI snapshots. |
+| `entrypoints/welcome/` | Setup choices; automatic mode starts only after its permission grant. |
+| `entrypoints/signup.content.ts` | Automatic form recognition and a protected page card. It reads structure, never field values. |
 
-## Reading a document (`src/engine/`)
+The worker cannot parse HTML with a page DOM. It downloads and checkpoints bytes/text; the report view parses completed results. A job marked complete therefore means downloads finished, not that every document was successfully recognised. Per-document results distinguish these cases.
 
-1. **Finding documents** (`documents.ts`): on a known site, the addresses from `rules/sites.json` (`known-sites.ts`), and a page is read in place only when it is one of them; otherwise the page's links whose labels or addresses name terms or a privacy policy, on the page's own site.
-2. **Fetching**: with the site access the user just granted, without cookies, at most 2 MB, never from a local or private network address, and never following a redirect to another site, except between a known site's own domains and legal domains (`src/auto/background.ts`).
-3. **Text** (`document.ts`): the HTML is parsed as the browser parses it (scripting off), skipping scripts, forms, dialogs and cookie or consent banners, and split into blocks and sentences.
-4. **Recognising the document**: at least 300 words and a title such as "Terms of Service" or "Privacy Policy". Anything else is reported as not that document.
-5. **Matching** (`rules.ts`): a rule matches a sentence when all of its `all` patterns match and none of its `none` patterns do. The first match per rule per clause becomes a finding, quoted exactly with its position. Each topic is then `found` or `not_found`, and a document that could not be read says why.
+## Reading pipeline
 
-The exact behaviour is specified in [reader.md](reader.md), with parity fixtures in `tests/fixtures/reader-parity.json`.
+1. `documents.ts` and `known-sites.ts` identify policies from configured known sites or discovered page links. Same-site checks use `tldts` with the Public Suffix List, including private hosting domains. Manual external candidates require selection and host permission; discovery does not fetch them.
+2. `src/auto/background.ts` bounds downloads to 2 MiB and a 20-second deadline covering headers and body. It omits cookies and validates visible redirects before following them, up to five hops. Same-site or explicitly configured known-service legal domains are allowed. Opaque redirects return a recovery reason. Address checks reject IP literals and recognised local names, not arbitrary public names resolving to private addresses.
+3. `document.ts` parses downloaded HTML with scripting off, applies structural visibility/banner filters, builds text blocks and records code-point offsets. Downloaded HTML has no computed external stylesheet or JavaScript state; its report carries a visibility notice.
+4. `rendered.ts` captures loaded tab text, computed visibility, open shadow roots and assigned slots without input values or page code. It bounds traversal and output, reports truncation, and does not traverse iframe contents or closed roots. Policy-control discovery offers focus for user activation, not automatic clicks.
+5. `pdf.ts`, `pdf-text.ts` and `pdf.worker.ts` decode bounded PDF bytes with bundled PDF.js. A disposable worker has no remote document URL, a 15-second limit, a 100-page limit and a 200,000-character output cap. Image-only, password-protected and malformed PDFs return errors. Automatic cards direct PDF reading to the report view.
+6. Identity checks require enough readable words and a recognised policy name, unless the user explicitly chooses the type. A manual type notice does not certify completeness. `language.ts` estimates language; `language-packs.ts` selects the applicable rule set.
+7. `rules.ts` finds every matching eligible sentence, plus supported bounded list-introduction/item matches, with exact quotes and nearby context. Reports deduplicate identical same-category spans without removing later distinct matches. A label is not a legal paraphrase.
 
-## Rules
+## Rules and language packs
 
-- `rules/rules.json` and `rules/sites.json` are bundled into the build (`bundled.ts`), so the extension works offline from the first run.
-- Signed rules run on the browser's own `RegExp`. Rules a person writes or imports run on [re2js](https://github.com/le0pard/re2js), a linear-time engine (`rule-set.ts`).
-- Every pattern, signed or not, passes `pattern-check.ts` first: a filter that refuses the regular-expression shapes known to backtrack badly. Official rules are also timed against hostile text in the tests, and checked in Go's RE2 engine by `tools/rulecheck`.
-- `rule-set.ts` combines the signed rules with the person's choices: rules switched off, copies they edited, and their own rules.
+English rules and known sites are bundled from `rules/rules.json` and `rules/sites.json`. English updates are accepted only after Ed25519 signature verification, version checks, pattern compilation and known-site validation. `rules-update.ts` stores the signed envelope and verifies it again before use. A failed download or invalid update keeps the usable rules already available.
 
-## Rules updates
+Spanish and French packs are bundled separately from `rules/es/` and `rules/fr/`. Each is version 1 with three categories: data sale, automatic renewal and arbitration. They replace the English/custom matching set for those language reads. They are not independently downloaded signed packs. Unsupported languages get no topic results; uncertain language uses the English fallback with a notice. Pack version and reader-profile changes must invalidate automatic cached reads.
 
-- `rules-update.ts` downloads `https://github.com/GuardianVigil-Labs/ClauseWatch/releases/latest/download/rules.signed.json` on install and then at most once a day, without cookies.
-- `verify.ts` checks the Ed25519 signature over the exact bytes of the signed text, against a public key in `trusted-keys.ts`, using WebCrypto. The file is used only if it verifies, its outer and inner versions agree, its patterns compile, its known sites pass the same check as `scripts/check-sites.mjs`, and its version is newer than both the bundled copy and any stored update.
-- The signed response is stored as it came and verified again every time it is used. Any failure keeps the rules already in hand.
+All patterns pass `pattern-check.ts`; official patterns also have hostile-input timing checks and JavaScript/Go fixtures. Custom patterns are compiled with RE2JS before they are considered runnable. `rule-set.ts` combines English rules with disabled IDs and validated custom rules, surfacing malformed, duplicate and over-budget entries as skipped.
 
-## AI help (`src/ai/`)
+`rules:edit` messages from extension pages enter one background promise queue. Each operation reads fresh storage, validates examples with the real scanner and enforces the combined 200-rule/600-pattern budget, including disabled rules. Add/import is validated before writing; delete and toggle use IDs. The queue avoids one Settings page replacing another's whole collection.
 
-Off by default. `assist.ts` talks to the browser's built-in model or to an OpenAI-compatible service with the user's own key. `validate.ts` keeps an AI finding only when its quote appears word for word in the document. `summary.ts` sends only the verified quotes, keeps only sentences that cite a quote by number, and `verdict.ts` refuses any sentence that judges the service.
+## Scan jobs and permissions
 
-## Storage
+`src/scan/jobs.ts` owns independent job records in `storage.session`. `client.ts` saves a plan and permission snapshot before starting the browser's permission prompt. Each plan retains the original targets, candidate groups, explicit document choice and known-site data; a later rules update cannot silently move an unfinished request to different URLs.
 
-Everything is kept in the browser's extension storage on the device (`src/storage.ts`): settings, own rules, the signed rules update, quiet sites, and recently read documents' quotes (for a week, without the full text). `storage.session` holds a pending scan while the permission prompt is open. Nothing is synced or sent.
+The worker wakes on job/permission changes, startup and a one-minute alarm. It attempts permitted jobs, checkpoints completed downloads, and can recover a running job up to three times after worker interruption. Fetch cancellation propagates through `AbortSignal`. Closing the popup does not cancel the job; it removes only the view. A persistent tab uses the same viewer and job store.
 
-## Permissions
+Jobs expire ten minutes after creation. A running job has a deadline; expired results, downloaded checkpoints and in-place bodies are scrubbed even when permission release is blocked by another job. Permission bookkeeping can remain until access is no longer borrowed. Completed, released expired jobs are removed. Cleanup prunes finished, released jobs to eight records. Shared serialized-character budget checks can reject oversized scans or clear older finished payloads early; active jobs and unreleased permission bookkeeping are handled separately.
 
-| Permission | Used for |
+Origins held before a scan are preserved. Newly requested origins are released when jobs no longer need them. Broad automatic-mode permission is handled separately. Obsolete `scanResult`/`scanPending` slots from pre-job versions are removed from local and session storage during worker initialization.
+
+## Automatic mode
+
+The runtime script is registered with `allFrames` only while the automatic preference and broad access are present. Each frame is scoped by `sender.url`, not the embedding tab's URL. Fetch and cache messages are checked again in the background.
+
+The content script observes child nodes and relevant field/visibility attributes in the document and open roots. A one-second local check detects History API navigation and roots attached to existing hosts. It handles sibling field wrappers, consent controls, and known sign-up routes, while excluding ordinary login-only forms and hidden fields.
+
+Disabling mode or removing access aborts automatic downloads and tells injected scripts to remove cards, observers, focus handlers and timers. Generation checks reject stopped-session or previous-route completions. Closing a loading card dismisses it for the current route, so a late result cannot recreate it.
+
+Only successfully read terms and privacy documents quiet a site for a week. Partial reports reuse successes and retry failures. Reuse preserves the original cache timestamp. Rule/configuration changes invalidate automatic caches. Muted sites remain quiet until unmuted.
+
+## Reports, history and comparisons
+
+`report.ts` renders source quotes, qualification text, coverage and surrounding excerpts. Source highlighting uses browser text-fragment navigation and is best effort. `report-tools.ts` creates plain-text/print previews and diagnostics. Report exports include source URLs and quotes; diagnostic exports use only result states, broad error categories, counts, coverage and timing, excluding text, URLs and settings. Neither is uploaded automatically.
+
+`Latest report` saves the last displayed web-policy report as quotes/context with its original rules version, not a separate body. It is bounded to 256,000 characters and seven days, excludes pasted/selected text, and does not renew when reopened. Automatic cached reports can also be reopened for their site. Fresh checks ask for access again as needed.
+
+History uses SHA-256 text fingerprints keyed by a hash of document kind and full canonical URL, including query and fragment. It keeps ten sites and twenty document identities per site. Different source URLs establish separate baselines. Legacy kind-only hashes do not establish revisions. Per-document change timestamps are filtered on display, so badges expire after thirty days without another scan; the recent-site record itself has no age-based expiry.
+
+Full-text comparisons require opt-in and an explicit remember action. Up to two versions per source and three sources are stored, capped at 100,000 characters per version and thirty days per version. Comparison reports exact added/removed paragraphs; reordering and duplicates are not treated as edits. `versions:edit` operations are serialized in the background and use a generation check so disabling/deleting versions rejects stale saves.
+
+## AI help
+
+`src/ai/assist.ts` uses either a browser-native model or an OpenAI-compatible endpoint after opt-in. `settings.ts` validates the full endpoint, including path. New saved key settings carry an endpoint binding; changing the destination requires credential selection. Legacy valid settings can use their existing configured destination until edited. Requests refuse redirects and binding mismatches.
+
+`source.ts` forms conservative complete source units, retaining semicolons, wrapped lines, abbreviations and immediate qualifications. `validate.ts` restores exact source spacing and accepts only complete eligible units, dropping generated explanations. Topic suggestions remain fallible. `summary.ts` checks every selected sentence against every actual cited source; a real citation number alone is insufficient. Verdict filtering remains an additional check. These are extractive grounding constraints, not general semantic entailment or legal interpretation.
+
+Document and summary inputs are batched, without cutting source sentences/quotes, at a 24,000-source-character limit. Coverage and omissions are shown before analysis. Requests have a 90-second deadline and bounded responses. Cancellation covers creation, headers and body; built-in sessions are destroyed, including late creation after cancellation. `src/ui/ai.ts` keeps completed analysis batches in open-report memory for explicit retry and aborts requests when reports close, are replaced, or AI settings change. Summary retries can resend inputs. No AI checkpoint is persisted.
+
+## Storage and cleanup
+
+| Area | Main keys and owner |
 |---|---|
-| `activeTab`, `scripting` | Reading the current page after the user clicks the button or a right-click item; running automatic mode's script on sites the user allowed. |
-| `contextMenus` | **Check this terms link** and **check selected text**. |
-| `storage` | Settings, own rules, the rules update and remembered quotes, on the device. |
-| `alarms` | The periodic check for the daily rules download. |
-| `github.com`, `release-assets.githubusercontent.com` | The daily rules download only: GitHub redirects from the first host to the second, and neither sends CORS headers. |
-| Optional `https://*/*`, `http://*/*` | Asked for at the moment it is needed: one site to read its documents (given back afterwards), all sites for automatic mode (given back when it is turned off), or the address of the user's own AI service. Never at install. |
+| Local settings | `automatic`, `ai`, `ownRules`, `disabledRuleIds`, `mutedSites`; settings UI with background ownership for rule edits. |
+| Rule updates | `rules:update`, `rules:checkedAt`; rule-update module. |
+| Automatic reports | `docs:<site>`; background validates the current read key and trims separate body text. |
+| Latest report | `latestReport`; report view writes a bounded slim report. |
+| Recent-site fingerprints | `recentSites`; report/history helpers. |
+| Opt-in full-text versions | `policyVersions`, `policyVersionsEnabled`, `policyVersionsGeneration`; serialized background edits. |
+| Session jobs | `scan:job:<id>`, `scan:focus`; job worker and viewer. |
 
-`npm run check:manifest` (`scripts/check-manifest.mjs`) fails the build if the manifest asks for more. Each permission is also justified for the stores in [STORE_LISTING.md](STORE_LISTING.md).
+`src/storage-retention.ts` cleans saved reports and each saved version; automatic cache cleanup lives in `src/auto/background.ts`. They run at startup and the fifteen-minute tick, with access-time cleanup where implemented. Scan payload cleanup runs independently on wake and a one-minute alarm. Cleanup resumes when the browser runs again. No data uses browser sync storage. See [privacy](PRIVACY.md) for retention and export details.
 
-## Checks
+## Permissions and checks
 
-Unit tests use Vitest with happy-dom. `npm run smoke` loads the built extension in a real Chromium with Playwright and blocks every outside request, checking that the only one made is the rules download. `npm run mutation` flips operators in changed files to find untested behaviour. The full list is in [AGENTS.md](../AGENTS.md#local-checks).
+| Permission | Purpose |
+|---|---|
+| `activeTab`, `scripting` | Read the clicked tab/selection and run permitted automatic scripts. |
+| `contextMenus` | Link and selection commands. |
+| `storage` | Local settings/reports and temporary session jobs. |
+| `alarms` | Rule-refresh scheduling and retention/job cleanup. |
+| Required GitHub hosts | Signed-rule download only. |
+| Optional HTTP(S) hosts | User-chosen scan hosts, broad access for automatic mode, or the configured AI service. |
+
+`wxt.config.ts` removes runtime-script host matches from required install-time access. `npm run check:manifest` pins the expected permissions and shipped licences. Public store explanations are in [STORE_LISTING.md](https://github.com/GuardianVigil-Labs/ClauseWatch/blob/main/docs/STORE_LISTING.md). Automated smoke checks use invented sites and simulated provider answers; native browser features and real permission prompts need [manual validation](browser-checklist.md).

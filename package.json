@@ -14,7 +14,7 @@
     "smoke": "node scripts/smoke.mjs",
     "mutation": "node scripts/mutate.mjs",
     "check:manifest": "node scripts/check-manifest.mjs",
-    "check:rules": "node scripts/check-sites.mjs && go -C tools/rulecheck vet ./... && go -C tools/rulecheck test ./... && go -C tools/rulecheck run . ../../rules",
+    "check:rules": "node scripts/check-sites.mjs && go -C tools/rulecheck vet ./... && go -C tools/rulecheck test ./... && go -C tools/rulecheck run . ../../rules && go -C tools/rulecheck run . ../../rules/es && go -C tools/rulecheck run . ../../rules/fr",
     "leak-guard": "node scripts/leak-guard.mjs --self-test && node scripts/leak-guard.mjs",
     "postinstall": "wxt prepare"
   },
@@ -26,6 +26,9 @@
     "wxt": "^0.21.4"
   },
   "dependencies": {
-    "re2js": "2.9.0"
+    "pdfjs-dist": "6.5.438",
+    "re2js": "2.9.0",
+    "tinyld": "1.3.4",
+    "tldts": "7.4.19"
   }
 }

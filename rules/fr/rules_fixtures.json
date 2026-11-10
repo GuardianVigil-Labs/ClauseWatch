@@ -1,0 +1,28 @@
+{
+  "fixtures": {
+    "fr-data-sale": {
+      "match": [
+        "Nous pouvons vendre vos données personnelles à nos partenaires avec votre consentement explicite."
+      ],
+      "noMatch": [
+        "Nous ne vendons jamais vos données personnelles à nos partenaires commerciaux."
+      ]
+    },
+    "fr-renewal": {
+      "match": [
+        "Votre abonnement sera renouvelé automatiquement chaque mois jusqu’à votre demande de résiliation."
+      ],
+      "noMatch": [
+        "Votre abonnement ne sera pas renouvelé automatiquement à la fin du contrat."
+      ]
+    },
+    "fr-arbitration": {
+      "match": [
+        "Tous les litiges seront soumis à un arbitrage obligatoire conformément au présent accord."
+      ],
+      "noMatch": [
+        "Les litiges ne nécessitent pas un arbitrage obligatoire et restent soumis aux tribunaux."
+      ]
+    }
+  }
+}

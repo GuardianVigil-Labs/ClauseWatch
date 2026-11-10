@@ -10,11 +10,13 @@ Never commit personal data, local paths, credentials or non-public information:
 - details of anyone's computer: local paths, machine names, user names, local hostnames or addresses;
 - credentials of any kind: keys, tokens, passwords, certificates, even expired or fake-looking ones;
 - customer, employee or user data, including in test fixtures (use invented examples and RFC 5737 addresses);
-- code, configuration or documents that are not part of this project, and links to private issues, documents or chats.
+- code, configuration or documents that are not part of this project, and links to private issues, documents or chats;
+- internal goals, planning, motivation or strategy, including material from unrelated work;
+- local diagnostic exports, account-page screenshots, environment logs or browser profiles.
 
 ## What the extension calls
 
-The extension calls no service of its own: its only request of its own is the daily download of the signed rules release from this repository's GitHub releases ([`docs/reader.md`](docs/reader.md)).
+The extension has no service of its own and no telemetry backend. It retrieves policies for requested scans or enabled automatic mode, downloads signed rules from this repository's GitHub releases at most daily, and contacts a user-configured AI endpoint only after opt-in and an explicit AI request. Downloaded policies and rule updates omit cookies. Exports and drafted messages are not sent automatically. See [privacy](docs/PRIVACY.md) and [the reader contract](docs/reader.md).
 
 ## Everything shipped is public
 
