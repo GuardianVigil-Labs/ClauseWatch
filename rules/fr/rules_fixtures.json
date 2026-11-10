@@ -1,0 +1,52 @@
+{
+  "fixtures": {
+    "fr-data-sale": {
+      "match": [
+        "Nous pouvons vendre vos données personnelles à nos partenaires avec votre consentement explicite.",
+        "Nous pouvons vendre vos données personnelles à nos partenaires si vous ne vous y opposez pas."
+      ],
+      "noMatch": [
+        "Nous ne vendons jamais vos données personnelles à nos partenaires commerciaux.",
+        "Il est faux de dire que nous vendons vos données personnelles, car nous ne les vendons jamais.",
+        "Il est faux de dire que nous vendons vos données personnelles : nous n’en vendons aucune.",
+        "Il est faux de dire que nous vendons vos données personnelles, nous ne les vendrons plus."
+      ]
+    },
+    "fr-renewal": {
+      "match": [
+        "Votre abonnement sera renouvelé automatiquement chaque mois jusqu’à votre demande de résiliation.",
+        "Votre abonnement sera renouvelé automatiquement si vous n’annulez pas avant l’échéance du contrat.",
+        "Votre abonnement sera renouvelé automatiquement chaque année, à moins que vous ne le résiliiez avant l’échéance."
+      ],
+      "noMatch": [
+        "Votre abonnement ne sera pas renouvelé automatiquement à la fin du contrat.",
+        "Votre forfait ne se renouvelle jamais automatiquement à la fin de la période choisie.",
+        "Votre abonnement n’est jamais renouvelé automatiquement à la fin de la période choisie.",
+        "Votre abonnement ne sera plus renouvelé automatiquement après la résiliation du contrat.",
+        "Votre abonnement ne sera en aucun cas renouvelé automatiquement sans votre accord exprès.",
+        "Votre forfait ne pourra pas être renouvelé automatiquement sans votre accord exprès.",
+        "Votre abonnement ne s’est jamais renouvelé automatiquement depuis la création du compte."
+      ]
+    },
+    "fr-arbitration": {
+      "match": [
+        "Tous les litiges seront soumis à un arbitrage obligatoire conformément au présent accord.",
+        "Tous les litiges qui ne peuvent pas être réglés à l’amiable seront soumis à un arbitrage obligatoire.",
+        "Les litiges qui ne sont pas réglés à l’amiable dans un délai de trente jours seront soumis à un arbitrage obligatoire.",
+        "Aucun des litiges ne sera exempté de l’arbitrage obligatoire prévu par cet accord.",
+        "Les litiges ne sont pas exclus de l'arbitrage obligatoire."
+      ],
+      "noMatch": [
+        "Les litiges ne nécessitent pas un arbitrage obligatoire et restent soumis aux tribunaux.",
+        "Les litiges ne seront pas soumis à un arbitrage obligatoire et restent devant les tribunaux.",
+        "Les litiges n’exigent pas un arbitrage obligatoire et restent soumis aux tribunaux.",
+        "Les litiges ne seront jamais soumis à un arbitrage obligatoire et restent devant les tribunaux.",
+        "Les litiges ne sont plus soumis à un arbitrage obligatoire depuis la mise à jour de ces conditions.",
+        "Les litiges ne nécessitent aucun arbitrage obligatoire et restent soumis aux tribunaux.",
+        "Les litiges n’imposent en aucun cas un arbitrage obligatoire aux utilisateurs du service.",
+        "Aucun des litiges ne sera soumis à un arbitrage obligatoire conformément au présent accord.",
+        "Aucun des litiges ne nécessite un arbitrage obligatoire."
+      ]
+    }
+  }
+}

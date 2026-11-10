@@ -26,9 +26,10 @@
         "\\b(your|users?'?|customers?'?|members?'?)\\s+(content|data|inputs?|uploads?|submissions?|materials?|prompts?|files?)\\b|\\b(content|data|inputs?|files?)\\s+(that\\s+)?(you|users)\\s+(provide|upload|submit|share|post)"
       ],
       "none": [
-        "\\b(do|does|will|shall|would)\\s+not\\b|\\b(don['’]t|doesn['’]t|won['’]t|can['’]t|never|cannot|unable\\s+to|not\\s+able\\s+to)\\b",
+        "(\\b(do|does|will|shall|would)\\s+not\\s+|\\b(don['\u2019]t|doesn['\u2019]t|won['\u2019]t|can['\u2019]t|never|cannot)\\s+|\\b(unable|not\\s+able)\\s+to\\s+)(knowingly\\s+)?(use|uses|using|train|training|improve|develop|fine-tun\\w*)\\b",
         "\\b(restrict|restricts|prohibit|prohibits|forbid|forbids|prevent|prevents)\\s(our\\s|any\\s|all\\s)?(ai\\s|third[- ]party\\s)?(service\\s)?(vendors?|providers?|partners?|processors?|sub-?processors?|third\\sparties|suppliers?)\\b[^.]{0,80}\\bfrom\\s(training|using)\\b"
-      ]
+      ],
+      "scope": "assertion"
     },
     {
       "id": "binding-arbitration",
@@ -76,16 +77,18 @@
       "id": "sells-personal-data",
       "category": "data_sale",
       "all": [
-        "\\b(sell|sells|sold|sale|rent|rents)\\b",
+        "\\b(we|company|service|partners?|affiliates?)\\b[^.;]{0,30}\\b(sell|sells|rent|rents)\\b|\\bpersonal\\s+(data|information)\\b[^.;]{0,40}\\b(sold|rented)\\b|\\b(considered|constitutes?)\\s+a\\s+sale\\b",
         "\\bpersonal\\s+(information|data)\\b"
       ],
       "none": [
-        "\\b(do|does|will|shall|would)\\s+not\\b|\\b(don['’]t|doesn['’]t|won['’]t|can['’]t|never|cannot|unable\\s+to|not\\s+able\\s+to)\\b",
-        "\\bnot\\s+(sell|sold|rent)\\b|\\bno\\s+sale\\b|\\bdo\\s+not\\s+sell\\s+(or\\s+share\\s+)?my\\b",
+        "(\\b(do|does|will|shall|would)\\s+not\\s+|\\b(don['\u2019]t|doesn['\u2019]t|won['\u2019]t|can['\u2019]t|never|cannot)\\s+|\\b(unable|not\\s+able)\\s+to\\s+)(sell|sells|rent|rents)\\b",
+        "\\b(not|never)\\s+(currently\\s+|knowingly\\s+|routinely\\s+|ever\\s+)?(sell|sells|sold|rent|rents|rented)\\b|\\bno\\s+sale\\b|\\bdo\\s+not\\s+sell\\s+(or\\s+share\\s+)?my\\b",
         "\\b(merger|acquisition|acquirers?|bankruptcy|change\\s+(of|in)\\s+control)\\b",
-        "\\brights?\\s+to\\b|\\bopt[\\s-]*out\\b",
-        "\\bpersonal\\s+(information|data)\\s+of\\s+others\\b|\\bothers['’]?\\s+personal\\s+(information|data)\\b"
-      ]
+        "\\bpersonal\\s+(information|data)\\s+of\\s+others\\b|\\bothers['\u2019]?\\s+personal\\s+(information|data)\\b",
+        "\\b(whether|if)\\s+we\\s+(sell|rent)\\b",
+        "\\bnever\\s+(sold|rented)\\b"
+      ],
+      "scope": "assertion"
     },
     {
       "id": "shares-with-data-brokers",
@@ -95,8 +98,9 @@
         "\\b(share|shares|sell|sells|disclose|discloses|provide|provides)\\b"
       ],
       "none": [
-        "\\b(do|does|will|shall|would)\\s+not\\b|\\b(don['’]t|doesn['’]t|won['’]t|can['’]t|never|cannot|unable\\s+to|not\\s+able\\s+to)\\b"
-      ]
+        "(\\b(do|does|will|shall|would)\\s+not\\s+|\\b(don['\u2019]t|doesn['\u2019]t|won['\u2019]t|can['\u2019]t|never|cannot)\\s+|\\b(unable|not\\s+able)\\s+to\\s+)(share|shares|sell|sells|disclose|discloses|provide|provides)\\b"
+      ],
+      "scope": "assertion"
     },
     {
       "id": "changes-without-notice",
@@ -106,7 +110,11 @@
         "\\b(terms|agreement|policy|conditions)\\b",
         "\\bwithout\\s+(prior\\s+|advance\\s+|any\\s+|further\\s+)?notice\\b|\\bwith\\s+or\\s+without\\s+notice\\b"
       ],
-      "none": []
+      "none": [
+        "(\\b(do|does|will|shall|would)\\s+not\\s+|\\b(don['\u2019]t|doesn['\u2019]t|won['\u2019]t|can['\u2019]t|never|cannot)\\s+|\\b(unable|not\\s+able)\\s+to\\s+)(modify|change|amend|update|revise|alter)\\w*\\b",
+        "\\b(is|are)\\s+not\\s+(changed|modified|amended|updated|revised|altered)\\b"
+      ],
+      "scope": "assertion"
     },
     {
       "id": "effective-on-posting",
@@ -128,11 +136,12 @@
         "\\b(data|information|content|copies|files|records|backups?|messages|posts|comments?)\\b"
       ],
       "none": [
-        "\\b(do|does|will|shall|would)\\s+not\\b|\\b(don['’]t|doesn['’]t|won['’]t|can['’]t|never|cannot|unable\\s+to|not\\s+able\\s+to)\\b",
+        "(\\b(do|does|will|shall|would)\\s+not\\s+|\\b(don['\u2019]t|doesn['\u2019]t|won['\u2019]t|can['\u2019]t|never|cannot)\\s+|\\b(unable|not\\s+able)\\s+to\\s+)(retain\\w*|keep|store|preserve\\w*|hold|maintain\\w*|continue)\\b",
         "\\b(keep|retain|store)\\s+no\\b|\\bno\\s+copies\\b|\\bwe\\s+(will\\s+)?(promptly\\s+|permanently\\s+)?(erase|delete|remove)\\s+(it|them|all|your)\\b",
         "\\bno\\s+longer\\b|\\b(is|are)\\s+not\\s+(retained|kept|stored|held|preserved)\\b|\\bno\\s+(personal\\s+)?(data|information|content|files|records)\\b|\\bonly\\s+(while|until|so\\s+long\\s+as|as\\s+long\\s+as)\\b",
         "\\b(and|then)\\s+(promptly\\s+|permanently\\s+)?(erase|delete|remove)\\s+(it|them|all|your)\\b|\\band\\s+(promptly\\s+|permanently\\s+)?(erased|deleted|removed)\\b|\\b(data|information|files|content)\\s+(is|are|will\\s+be)\\s+(promptly\\s+|permanently\\s+)?(erased|deleted|removed)\\b"
-      ]
+      ],
+      "scope": "assertion"
     },
     {
       "id": "shares-data-for-advertising",
@@ -143,24 +152,25 @@
         "\\b(your|users?'?|personal)\\s+(personal\\s+|hashed\\s+)?(data|information|details|identifiers|email\\s+address)\\b|\\b(data|information)\\s+(about|from)\\s+(you|your|users)\\b|\\b(device|advertising)\\s+identifiers\\b|\\bbrowsing\\s+(activity|history)\\b|\\bhashed\\s+e-?mail"
       ],
       "none": [
-        "\\b(do|does|will|shall|would)\\s+not\\s+(sell\\s+or\\s+)?(share|disclose|provide|transfer)\\b|\\b(don['’]t|doesn['’]t|won['’]t|never)\\s+(sell\\s+or\\s+)?(share|disclose|provide|transfer)\\b|\\bnever\\s+sharing\\b",
+        "\\b(do|does|will|shall|would)\\s+not\\s+(sell\\s+or\\s+)?(share|disclose|provide|transfer)\\b|\\b(don['\u2019]t|doesn['\u2019]t|won['\u2019]t|never)\\s+(sell\\s+or\\s+)?(share|disclose|provide|transfer)\\b|\\bnever\\s+sharing\\b",
         "\\bonly\\s+with\\s+your\\s+(permission|consent)\\b|\\bif\\s+you\\s+opt\\s+in\\b",
-        "\\b(is|are|will|shall|would)\\s+not\\s+(be\\s+)?(shared|disclosed|provided|transferred)\\b|\\b(isn['’]t|aren['’]t|won['’]t|never)\\s+(be\\s+)?(shared|disclosed|provided|transferred)\\b|\\bno\\s+(personal\\s+)?(data|information)\\s+is\\s+(shared|disclosed|provided|transferred)\\b|\\bis\\s+never\\s+(shared|disclosed)\\b"
+        "\\b(is|are|will|shall|would)\\s+not\\s+(be\\s+)?(shared|disclosed|provided|transferred)\\b|\\b(isn['\u2019]t|aren['\u2019]t|won['\u2019]t|never)\\s+(be\\s+)?(shared|disclosed|provided|transferred)\\b|\\bno\\s+(personal\\s+)?(data|information)\\s+is\\s+(shared|disclosed|provided|transferred)\\b|\\bis\\s+never\\s+(shared|disclosed)\\b"
       ]
     },
     {
       "id": "automatic-renewal",
       "category": "auto_renewal",
       "all": [
-        "\\b(automatic\\s+(renewal|billing|payments?|charges?)|automatically|auto[-‑\\s]?renew\\w*|recurring|unless\\s+you\\s+cancel|until\\s+you\\s+cancel|renews\\s+(each|every))\\b",
+        "\\b(automatic\\s+(renewal|billing|payments?|charges?)|automatically|auto[-\u2011\\s]?renew\\w*|recurring|unless\\s+you\\s+cancel|until\\s+you\\s+cancel|renews\\s+(each|every))\\b",
         "\\b(renew\\w*|charge|charged|bill|billed|billing)\\b"
       ],
       "none": [
-        "\\b(do|does|will|shall|would)\\s+not\\s+(automatically\\s+)?(renew|charge|bill)\\b|\\b(won['’]t|never)\\s+(automatically\\s+)?(renew|charge|bill)\\b",
-        "\\boff\\s+by\\s+default\\b|\\b(turn|switch)\\s+off\\b|\\breminder\\b",
+        "\\b(do|does|will|shall|would)\\s+not\\s+(automatically\\s+)?(renew|charge|bill)\\b|\\b(won['\u2019]t|never)\\s+(automatically\\s+)?(renew|charge|bill)\\b",
+        "\\boff\\s+by\\s+default\\b",
         "\\bnot\\s+(be\\s+)?(automatically\\s+)?renewed\\b|\\bnot\\s+automatically\\s+renew\\w*",
-        "\\b(don['’]t|doesn['’]t)\\s+(automatically\\s+)?(auto-?)?(renew|charge|bill)|\\b(do|does|will|shall)\\s+not\\s+(be\\s+)?(automatically\\s+)?(auto-?)?(renew|charge|bill)|\\bno\\s+(automatic\\s+renewal|auto-renewal|recurring\\s+(billing|charges?))\\b"
-      ]
+        "\\b(don['\u2019]t|doesn['\u2019]t)\\s+(automatically\\s+)?(auto-?)?(renew|charge|bill)|\\b(do|does|will|shall)\\s+not\\s+(be\\s+)?(automatically\\s+)?(auto-?)?(renew|charge|bill)|\\bno\\s+(automatic\\s+renewal|auto-renewal|recurring\\s+(billing|charges?))\\b"
+      ],
+      "scope": "assertion"
     },
     {
       "id": "cancellation-notice-period",
@@ -170,11 +180,12 @@
         "\\b(\\d{1,3}|seven|fourteen|thirty|sixty|ninety)\\s+(calendar\\s+|business\\s+)?(days?|hours?)\\s+(prior\\s+to|before|in\\s+advance)\\b|\\b(at\\s+least|no\\s+later\\s+than|no\\s+less\\s+than|not\\s+less\\s+than)\\s+(\\d{1,3}|seven|fourteen|thirty|sixty|ninety)\\s+(calendar\\s+|business\\s+)?(days?|hours?)\\b"
       ],
       "none": [
-        "\\b(do|does|will|shall|would)\\s+not\\b|\\b(don['’]t|doesn['’]t|won['’]t|can['’]t|never|cannot|unable\\s+to|not\\s+able\\s+to)\\b",
+        "(\\b(do|does|will|shall|would)\\s+not\\s+|\\b(don['\u2019]t|doesn['\u2019]t|won['\u2019]t|can['\u2019]t|never|cannot)\\s+|\\b(unable|not\\s+able)\\s+to\\s+)(need|have|require|cancel|charge|give)\\b",
         "\\bwithin\\s+(\\d{1,3}|seven|fourteen|thirty)\\s+days\\s+of\\s+(purchase|buying|signing|subscribing|sign-?up)\\b",
         "\\bremind\\w*|\\bnotify\\s+you\\b|\\bwe\\s+(may\\s+|will\\s+|can\\s+)?cancel\\b",
         "\\bcancel\\s+at\\s+any\\s+time\\b|\\bwe\\s+(will\\s+)?(notify|remind|email|send)\\s+you\\b|\\breminder\\b"
-      ]
+      ],
+      "scope": "assertion"
     },
     {
       "id": "limits-liability",
@@ -186,7 +197,7 @@
       "none": [
         "\\b(cannot|can\\s+not|may\\s+not)\\s+be\\s+(limited|excluded)\\b|\\bnothing\\b[^.]{0,80}\\b(limits?|excludes?|restricts?|affects?)\\b|\\bis\\s+not\\s+(limited|excluded)\\b",
         "\\bdo\\s+not\\s+allow\\s+the\\s+(exclusion|limitation)\\b|\\byou\\s+(are|will\\s+be|shall\\s+be)\\s+(solely\\s+)?(liable|responsible)\\b",
-        "\\b(do|does|will|shall)\\s+not\\s+(limit|exclude|restrict)\\b|\\b(don['’]t|won['’]t|never)\\s+(limit|exclude|restrict)\\b|\\byou\\s+(are\\s+not|aren['’]t|will\\s+not\\s+be|won['’]t\\s+be|shall\\s+not\\s+be)\\s+(liable|responsible)\\b",
+        "\\b(do|does|will|shall)\\s+not\\s+(limit|exclude|restrict)\\b|\\b(don['\u2019]t|won['\u2019]t|never)\\s+(limit|exclude|restrict)\\b|\\byou\\s+(are\\s+not|aren['\u2019]t|will\\s+not\\s+be|won['\u2019]t\\s+be|shall\\s+not\\s+be)\\s+(liable|responsible)\\b",
         "\\b(third[- ]party|partner|external|linked|other)\\s+(websites?|sites?|services|apps?|platforms?)\\b[^.]{0,120}\\bnot\\sresponsible\\sfor\\s(their|its)\\s(privacy|content|practices|policies)\\b"
       ]
     },
@@ -211,12 +222,13 @@
         "\\b(data|information|details)\\b"
       ],
       "none": [
-        "\\b(do|does|will|shall|would)\\s+not\\b|\\b(don['’]t|doesn['’]t|won['’]t|can['’]t|never|cannot|unable\\s+to|not\\s+able\\s+to)\\b",
+        "(\\b(do|does|will|shall|would)\\s+not\\s+|\\b(don['\u2019]t|doesn['\u2019]t|won['\u2019]t|can['\u2019]t|never|cannot)\\s+|\\b(unable|not\\s+able)\\s+to\\s+)(knowingly\\s+)?(collect\\w*|process\\w*|gather\\w*|use)\\b",
         "\\b(not\\s+(directed|intended)|not\\s+knowingly)\\b",
         "\\b(delete|remove|erase)\\b",
         "\\b(may|must)\\s+not\\s+use\\b|\\bmust\\s+be\\s+at\\s+least\\b",
         "\\bno\\s+(personal\\s+)?(data|information|details)\\b|\\b(is|are)\\s+not\\s+(knowingly\\s+)?(collected|processed|gathered|used)\\b|\\bif\\s+(you|a\\s+parent)\\s+believe\\b|\\bcontact\\s+us\\b"
-      ]
+      ],
+      "scope": "assertion"
     },
     {
       "id": "collects-location-or-biometrics",
@@ -226,9 +238,10 @@
         "\\b(collect\\w*|process\\w*|use|uses|used|store\\w*|share\\w*|access\\w*|track\\w*|creat\\w*)\\b"
       ],
       "none": [
-        "\\b(do|does|will|shall|would)\\s+not\\b|\\b(don['’]t|doesn['’]t|won['’]t|can['’]t|never|cannot|unable\\s+to|not\\s+able\\s+to)\\b",
+        "(\\b(do|does|will|shall|would)\\s+not\\s+|\\b(don['\u2019]t|doesn['\u2019]t|won['\u2019]t|can['\u2019]t|never|cannot)\\s+|\\b(unable|not\\s+able)\\s+to\\s+)(collect\\w*|process\\w*|use|store\\w*|share\\w*|access\\w*|track\\w*|create\\w*)\\b",
         "\\b(stays?|stored|kept|remains?)\\s+(only\\s+)?on\\s+your\\s+device\\b|\\bonly\\s+with\\s+your\\s+(permission|consent)\\b|\\b(turn|switch)\\s+off\\b"
-      ]
+      ],
+      "scope": "assertion"
     },
     {
       "id": "terminate-without-reason",
@@ -239,12 +252,23 @@
         "\\b(any\\s+time|any\\s+reason|no\\s+reason|without\\s+(cause|reason|notice|prior\\s+notice|explanation)|sole\\s+discretion|whenever\\s+we\\s+(choose|wish|like))\\b"
       ],
       "none": [
-        "\\b(do|does|will|shall|would)\\s+not\\b|\\b(don['’]t|doesn['’]t|won['’]t|can['’]t|never|cannot|unable\\s+to|not\\s+able\\s+to)\\b",
+        "(\\b(do|does|will|shall|would)\\s+not\\s+|\\b(don['\u2019]t|doesn['\u2019]t|won['\u2019]t|can['\u2019]t|never|cannot)\\s+|\\b(unable|not\\s+able)\\s+to\\s+)(terminat\\w*|suspend\\w*|close|disable|delete|deactivat\\w*|remove|revoke|ban)\\b",
         "\\b(you|users?|customers?|members?)\\s+(may|can|are\\s+free\\s+to|have\\s+the\\s+right\\s+to)\\b[^.]{0,50}\\b(terminate|close|delete|cancel|deactivate|disable|remove|do\\sso)\\b",
         "\\b(if|where)\\s+you\\s+(breach|violate|break)\\b|\\bmaterial\\s+breach\\b|\\beither\\s+party\\b[^.]{0,80}\\bnotice\\b|\\bwith\\s+notice\\b|\\bnotify\\s+you\\b",
         "\\b(you|users?)\\s+(may|can|are\\s+free\\s+to|have\\s+the\\s+right\\s+to)\\s+(revoke|withdraw)\\s+(your\\s+|their\\s+)?consent\\b"
-      ]
+      ],
+      "scope": "assertion"
+    },
+    {
+      "id": "conditional-data-sale",
+      "category": "data_sale",
+      "all": [
+        "\\b(we|company|service)\\s+(do|does|will|shall)\\s+not\\s+(sell|rent)\\b|\\bwe\\s+(don['\u2019]t|never)\\s+(sell|rent)\\b",
+        "\\bpersonal\\s+(data|information)\\b",
+        "\\bexcept\\s+(to\\s+(advertisers?|advertising\\s+partners?|partners?|data\\s+brokers?|third\\s+parties)|with\\s+your\\s+(consent|permission)|when\\s+you\\s+(consent|agree|opt\\s+in))\\b"
+      ],
+      "none": []
     }
   ],
-  "version": 3
+  "version": 4
 }

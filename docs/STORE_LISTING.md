@@ -1,60 +1,63 @@
-# Store listing (Chrome Web Store, Firefox Add-ons, Edge Add-ons, Opera add-ons)
+# Store listing and disclosures
+
+Draft text for the current source checkout. Before submitting a release, verify it against the packaged version, the [privacy policy](PRIVACY.md) and [browser checklist](browser-checklist.md). Updating this file does not publish a store listing or privacy website. The release workflow uploads packages to the stores ([releasing](releasing.md#store-submission)); listing text, screenshots and disclosure fields are still updated by hand in each store's dashboard.
 
 ## Single purpose
 
-Shows what a service's terms and privacy policy say, quoted, at sign-up.
+Show what a service's terms and privacy policy say, quoted, at sign-up.
 
-## Short description (132 characters or fewer)
+## Short description
 
 See what a site's terms and privacy policy say before you sign up: AI training, arbitration, data sale. Quoted, never scored.
 
 ## Long description
 
-ClauseWatch reads a service's terms of service and privacy policy and shows you, in exact quotes, what they say about 13 topics (18 open detection rules), including whether they let the service:
+ClauseWatch reads terms and privacy policies on your device and shows exact source quotes. The English pack contains 19 rules under 13 topics, including data sale, automatic renewal, AI training on uploaded content, arbitration, content licences and changes without notice. Initial Spanish and French packs cover three topics each: data sale, automatic renewal and arbitration. Unsupported or uncertain language coverage is labelled.
 
-- train AI on what you upload or type;
-- send disputes to private arbitration or waive class actions;
-- take ownership of, or a perpetual licence to, your content;
-- sell or broker your personal data;
-- change the terms without notice.
+Click the toolbar icon to read a policy or its links, scan an address, paste/select text, or enable automatic sign-up detection with site access. Known services have configured terms and privacy addresses. A rendered-tab fallback helps with pages loaded by JavaScript or after sign-in; text-based PDFs are extracted locally.
 
-Every finding is a sentence from the document, with a link to where it came from. If a clause is not there, ClauseWatch lists it under "Not found", and says that "not found" is not "safe". If a document cannot be read, it says so and why. It never gives a score or calls a service safe. Quotes from the documents, not legal advice.
+Background scans have progress, cancellation and retry, with a persistent scan tab. Findings offer nearby context and browser-supported source highlighting. The latest web-policy quote report can be reopened. Optional full-text policy comparisons are off by default and stored only on the device. Plain-text/print reports and diagnostic previews can be exported by the user; nothing is sent to support automatically.
 
-It works on your device, with no account. Click the toolbar button on a sign-up page to read that site, or turn on Automatic mode to see the card as soon as you start filling in a sign-up form. For about 45 popular AI and software services, ClauseWatch knows exactly where their terms and privacy policy are. Anywhere else, right-click a terms link or selected text and choose ClauseWatch.
+“Not found” is not “safe”. A topic label is not a legal interpretation, and wording outside a pack's coverage can be missed. Documents that cannot be read show a reason and recovery path. ClauseWatch never gives a service score. Quotes from the documents, not legal advice.
 
-Free and open source. The detection rules and the known-sites list are public, improved by pull request, and every update is signed.
+AI help is optional and off by default. A built-in model works on the device; using your own key sends the requested text to the service you select. AI findings must preserve complete source units, and summaries select sentences from actual cited quotes. Cancellation, request deadlines and explicit retries are available.
+
+Free and open source, with no account, advertising or telemetry service. Downloaded English rule/known-site updates are signature-verified; bundled language packs ship with the extension.
 
 ## Permission justifications
 
-| Permission | Why |
+| Permission | Purpose |
 |---|---|
-| `activeTab` | Read the page you are on, only after you click the toolbar button or choose ClauseWatch in the right-click menu. |
-| `scripting` | Read that page's text (or your selected text) after your click, and run Automatic mode's form detection on the sites you allowed, when you turn it on. |
-| `contextMenus` | The two right-click items: **ClauseWatch: check this terms link** on links, and **ClauseWatch: check selected text** on selections. |
-| `storage` | Keep your settings, your own rules, the signed rules update and the quotes from documents already read, on your device. |
-| `alarms` | Every 15 minutes, check whether the daily download of signed rules is due (at most once a day). |
-| Host access to `github.com` and `release-assets.githubusercontent.com` | Once a day, download the latest signed rules release (`https://github.com/GuardianVigil-Labs/ClauseWatch/releases/latest/download/rules.signed.json`). GitHub answers with a redirect to the release, then to its file storage on the second host; neither sends CORS headers, so the extension needs access to both for this one download. That is all they are used for: the extension reads no GitHub page and runs nothing on either host. The request carries no account, identifier or cookie. |
-| Optional host access (`https://*/*`, `http://*/*`) | Requested only when you choose to: the sites of a service's terms and privacy policy when you read them, an address you scan, or a link you right-click (one site at a time, given back afterwards); all sites when you turn on Automatic mode (given back when you turn it off); the address of your own AI service when you save your own API key. Never requested at install: setup starts with Automatic mode chosen, and asks only when you click **Done**. |
+| `activeTab` | Read the clicked page or selected text after a toolbar/menu action. |
+| `scripting` | Capture page/selection text and run automatic detection on permitted sites. |
+| `contextMenus` | Link and selected-text commands. |
+| `storage` | Settings, own rules, accepted signed updates, quote reports/history, optional full-text comparison versions and temporary scan jobs. |
+| `alarms` | Fifteen-minute rule-refresh/retention tick, and a one-minute scan wake/expiry alarm that exists only while a scan is kept. Rules download at most daily. |
+| Required access to `github.com` and `release-assets.githubusercontent.com` | Download the public signed English rule/known-site release. GitHub can redirect to release-asset storage; no visited-site list, application account identifier or cookies are added. |
+| Optional HTTP(S) host access | Requested for chosen policy hosts (including approved external legal hosts), broad automatic-mode operation, or the user's configured AI service. Scan-added access is released when no longer needed; prior access is preserved. Automatic access is requested only when enabled. |
 
-`minimum_chrome_version` 137 and Firefox `strict_min_version` 140 (142 on Android): rule signatures are checked with WebCrypto Ed25519, and Firefox's data collection declaration needs 140.
+The manifest requires Chrome 137 or later, Firefox 140 or later and Firefox Android 142 or later. Minimums reflect signature-verification and Firefox disclosure requirements, not a claim that every optional browser feature is available on each device.
 
-## Data use
+## Data use and retention
 
-- Nothing about the user leaves the device. The daily rules download carries no account, identifier or cookie. Documents are fetched from the service, without cookies, analysed on the device, and their quotes remembered on the device for a week without the full text.
-- **AI help (off by default):** the built-in model runs on the device; with the user's own key, a summary sends only the quotes found, and "Look for clauses the rules missed" sends the text being checked (the document, or the text the user pasted or selected, up to 24,000 characters), only to the AI service they named. Every AI finding is shown only if it quotes the document exactly, labelled "Found by AI (quoted)".
-- No data is sold, used for advertising, used to train models, or used for creditworthiness or lending. (Limited Use: the use of information received from Google APIs adheres to the Chrome Web Store User Data Policy, including the Limited Use requirements. ClauseWatch uses no Google APIs.)
+Policy downloads omit cookies and are processed locally. Reading a loaded policy tab uses the browser's existing page; the site may already have its own sign-in session. ClauseWatch has no telemetry service and does not maintain a general browsing history. Document hosts, GitHub and any chosen AI service can observe ordinary requests to them.
 
-Data categories (Chrome): "Website content" only (the text being checked, sent to the user's own AI service, only when they choose their own key), to provide the feature the user chose.
+Automatic quote caches and the latest slim web report have seven-day validity. Temporary session scan payloads can contain HTML/text/PDF data and expire ten minutes after creation, with cleanup on worker wake/alarm and at session end. Recent-site fingerprints retain up to ten sites and twenty source identities per site; change badges expire after thirty days. Opt-in policy versions retain up to two full texts per source, three sources, at most 100,000 characters each, for thirty days. Cleanup resumes when the browser runs. Full details: [PRIVACY.md](PRIVACY.md).
 
-Data collection (Firefox, `data_collection_permissions`): required `none`; optional `websiteContent`, used only when the user turns on AI help with their own key. The extension requests it together with the key's address, when the key is saved (Firefox 140+), before anything is sent.
+With an external AI key, summary inputs contain verified quotes; document analysis can send the full eligible text across multiple batches of at most 24,000 source characters each. Coverage appears before sending. The key is tied to the selected endpoint, and endpoint/path changes require credential selection. Requests refuse redirects and have a 90-second deadline. Provider data use is governed by that provider's terms; ClauseWatch does not claim the provider never stores or trains on requests.
 
-## Listing assets
+Report exports include quoted text and full source URLs, dates, rule version and coverage; users review and share them themselves. Diagnostic exports exclude policy text, quotes, HTML, URLs, settings and credentials. Optional comparison text and exports are not uploaded by ClauseWatch.
 
-In `docs/store/`, made from the built extension on invented `.example` pages:
+**Chrome disclosure:** website content is processed for the feature requested by the user and sent externally only when that user chooses an external AI service or shares an export. ClauseWatch uses no Google APIs. Its own handling is not for advertising, lending or model training; provider terms remain separate. Reconcile all store disclosure fields with the submitted package.
 
-- Screenshots (1280×800): `screenshot-1-popup-quotes.png` (the popup on a sign-up page with its quotes), `screenshot-2-scan-a-link.png`, `screenshot-3-automatic-card.png` (Automatic mode's card beside a sign-up form), `screenshot-4-right-click.png` (the result of "check selected text"), `screenshot-5-settings.png` (Settings → Rules).
-- Promo tile (440×280): `promo-tile-440x280.png`, "Know what you agree to."
-- Edge logo (300×300): `edge-logo-300.png`.
-- Support: clausewatch@guardianvigil.io. Privacy policy: https://guardianvigil.io/clausewatch/privacy/. Source: https://github.com/GuardianVigil-Labs/ClauseWatch
+**Firefox disclosure:** the manifest declares required `none` and optional `websiteContent` for external AI help. The extension requests website-content consent with the configured service's host access on supported Firefox versions. Test the prompt and declaration in the release build before submission.
 
-Licence: open source under Apache-2.0; the source is public on GitHub. The names and the shield mark are not licensed (TRADEMARKS.md).
+## Listing assets and public links
+
+`docs/store/` contains screenshots, a promotional tile and an Edge logo. The screenshots use invented example pages and illustrate the earlier interface; they do not establish that every current control or browser flow was validated. Review or replace them against the packaged release before submission. Do not use account pages, internal hostnames, private documents or machine metadata in new captures.
+
+- Support: clausewatch@guardianvigil.io
+- Public privacy page: https://guardianvigil.io/clausewatch/privacy/
+- Source: https://github.com/GuardianVigil-Labs/ClauseWatch
+
+Apache-2.0 covers the code. Project names and the shield mark have separate [trademark terms](https://github.com/GuardianVigil-Labs/ClauseWatch/blob/main/TRADEMARKS.md).

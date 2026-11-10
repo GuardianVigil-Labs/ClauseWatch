@@ -3,6 +3,7 @@
 // styles. "Not found" and "could not read" are shown as such; nothing here
 // ever says "safe" or gives a score.
 
+import type { Finding } from "../engine/rules";
 import type { DocumentResult, Kind } from "../engine/documents";
 import { foundCount } from "./scan";
 
@@ -15,20 +16,20 @@ export interface Report {
   siteCard?: boolean;
 }
 
-const CATEGORY: Record<string, { label: string; allows: string }> = {
-  ai_training: { label: "AI training on your content", allows: "The service may use what you upload or type to train or improve AI models." },
-  arbitration: { label: "Arbitration and class-action waiver", allows: "Disputes go to private arbitration, or you give up joining a class action." },
-  ip_assignment: { label: "Rights over your content", allows: "You assign ownership of, or grant a perpetual licence to, what you submit." },
-  data_sale: { label: "Sale or brokering of personal data", allows: "Personal data may be sold, rented, or shared with data brokers." },
-  unilateral_change: { label: "Changes without notice", allows: "The terms may change without notice, or take effect as soon as they are posted." },
-  data_retention: { label: "Data kept after you leave", allows: "Your data may be kept after you close or delete your account." },
-  ad_sharing: { label: "Data shared for advertising", allows: "Your personal data may be shared with advertisers or ad networks." },
-  auto_renewal: { label: "Automatic renewal", allows: "The plan renews and charges you automatically, or cancelling needs notice in advance." },
-  liability_limit: { label: "Limits on the company's liability", allows: "The company limits or excludes what it owes you if something goes wrong." },
-  governing_law: { label: "Governing law and courts", allows: "Disputes are decided under a named law, or only in named courts." },
-  children_data: { label: "Children's data", allows: "The service may collect or use data about children." },
-  location_biometric: { label: "Location and biometric data", allows: "The service may collect precise location, or biometric data such as face or fingerprint." },
-  termination: { label: "Account closed at the company's discretion", allows: "The company may close or suspend your account at any time, for any reason." },
+const CATEGORY: Record<string, { label: string }> = {
+  ai_training: { label: "AI training on your content" },
+  arbitration: { label: "Arbitration and class-action waiver" },
+  ip_assignment: { label: "Rights over your content" },
+  data_sale: { label: "Sale or brokering of personal data" },
+  unilateral_change: { label: "Changes without notice" },
+  data_retention: { label: "Data kept after you leave" },
+  ad_sharing: { label: "Data shared for advertising" },
+  auto_renewal: { label: "Automatic renewal" },
+  liability_limit: { label: "Limits on the company's liability" },
+  governing_law: { label: "Governing law and courts" },
+  children_data: { label: "Children's data" },
+  location_biometric: { label: "Location and biometric data" },
+  termination: { label: "Account termination and suspension" },
 };
 /** A topic's plain name, for banners and cards; an unknown topic shows its key. */
 export const topicLabel = (c: string): string => CATEGORY[c]?.label ?? c;
@@ -105,12 +106,36 @@ export function fillReport(root: ShadowRoot, r: Report): void {
 export function reportCards(r: Report): HTMLElement[] {
   const read = r.documents.filter((d): d is Extract<DocumentResult, { status: "read" }> => d.status === "read");
   const cards = r.siteCard === false ? [] : [siteCard(r.site, r.documents)];
-  for (const d of read) for (const c of d.categories) if (c.status === "found") for (const f of c.findings) cards.push(findingCard(d, c.category, f.quote, r.onQuote));
-  const absent = notFoundCard(read);
+  for (const d of read) {
+    const notes = [...(d.notices ?? [])];
+    if (otherLanguage(d)) notes.push(`Language coverage: ${d.coverage!.language}. No built-in rule pack covers this language; only the English rules were applied, so topics written in this language may be missed.`);
+    else if (d.coverage?.status === "unsupported") notes.push(`The page is marked as ${d.coverage.language}, but its language could not be identified confidently. The English rules were applied; topics may be missed.`);
+    if (d.coverage?.status === "supported") notes.push(d.coverage.confident === false
+      ? `Language pack: ${d.coverage.language}, version 1, applied alongside the English rules because the language could not be identified confidently.`
+      : `Language pack: ${d.coverage.language}, version 1. Limited coverage: data sale, automatic renewal and arbitration only. English and custom rules are not applied to this document.`);
+    if (d.coverage?.status === "unknown") notes.push("Language could not be identified confidently. Default English checks were used; topics may be missed.");
+    if (notes.length) {
+      const card = el("section", undefined, "card");
+      card.setAttribute("aria-label", "Reading coverage");
+      for (const note of notes) card.append(el("p", note, "meta"));
+      cards.push(card);
+    }
+  }
+  const shown = new Set<string>();
+  for (const d of read) for (const c of d.categories) if (c.status === "found") for (const f of c.findings) {
+    const key = JSON.stringify([d.kind, d.url, c.category, f.start, f.end]);
+    if (shown.has(key)) continue;
+    shown.add(key);
+    cards.push(findingCard(d, c.category, f, r.onQuote));
+  }
+  const absent = notFoundCard(read.filter((d) => !otherLanguage(d)));
   if (absent) cards.push(absent);
   for (const d of r.documents) if (d.status === "could_not_read") cards.push(unreadCard(d));
   return cards;
 }
+
+/** Text identified as a language without a pack: English rules ran, so a missing topic proves nothing. */
+const otherLanguage = (d: DocumentResult) => d.status === "read" && d.coverage?.status === "unsupported" && d.coverage.confident !== false;
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, cls?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -136,21 +161,25 @@ function siteCard(site: string, documents: DocumentResult[]): HTMLElement {
   const who = el("div", undefined, "who");
   who.append(el("p", site, "name mono"), el("p", what, "meta"));
   card.append(el("span", site.replace(/^[^a-z0-9]+/i, "").slice(0, 1).toUpperCase() || "?", "initial"), who);
-  if (read.length) card.append(el("span", `${found} found`, `badge ${found ? "amber" : "plain"}`));
+  if (found || read.some((d) => !otherLanguage(d))) card.append(el("span", `${found} found`, `badge ${found ? "amber" : "plain"}`));
   return card;
 }
 
-function findingCard(d: Extract<DocumentResult, { status: "read" }>, category: string, quote: string, onQuote?: Report["onQuote"]): HTMLElement {
+function findingCard(d: Extract<DocumentResult, { status: "read" }>, category: string, finding: Finding, onQuote?: Report["onQuote"]): HTMLElement {
   const t = TONE[category] ?? { tone: "blue" as const, badge: topicLabel(category) };
   const card = el("article", undefined, `card finding ${t.tone}`);
   const head = el("div", undefined, "head");
   head.append(el("h2", topicLabel(category)), el("span", t.badge, `badge ${t.tone}`));
-  const info = CATEGORY[category];
+  const quote = finding.quote;
   const source = el("p", KIND_LABEL[d.kind], "source mono");
   // Only a web address is a link (pasted text has none).
   if (/^https?:\/\//i.test(d.url)) {
     const a = el("a", "open ↗");
-    a.href = d.url;
+    const destination = new URL(d.url);
+    destination.hash = destination.hash.split(":~:")[0]! + ":~:text=" + encodeURIComponent(quote).replace(/-/g, "%2D");
+    a.href = destination.href;
+    a.textContent = "Highlight quote in policy ↗";
+    a.title = "Open the policy with this quote highlighted where supported";
     a.target = "_blank";
     a.rel = "noopener noreferrer";
     source.append(" · ", a);
@@ -161,7 +190,18 @@ function findingCard(d: Extract<DocumentResult, { status: "read" }>, category: s
     share.addEventListener("click", () => onQuote(d.kind, quote));
     source.append(" · ", share);
   }
-  card.append(head, ...(info ? [el("p", info.allows, "allows")] : []), el("blockquote", `“${quote}”`), source);
+  card.append(head, el("p", "A rule matched this topic. The quoted conditions and exceptions determine what it says.", "allows"), el("blockquote", `“${quote}”`), source);
+  if (finding.matchKind === "list") card.append(el("p", "This quote includes a list introduction and its adjacent item.", "meta"));
+  const qualified = /\b(unless|except|only\s+(if|with|when)|if\s+you|subject\s+to|provided\s+that|with\s+your\s+(consent|permission))\b/i.exec(quote);
+  if (qualified) card.append(el("p", `Wording to review in the quote: “${quote.slice(qualified.index)}”`, "meta"));
+  {
+    const details = el("details");
+    details.append(el("summary", "Show surrounding text"));
+    const excerpt = el("blockquote", finding.context?.text ?? quote);
+    excerpt.style.whiteSpace = "pre-wrap";
+    details.append(el("p", finding.context ? "Source excerpt, including nearby sentences and paragraphs. It may contain qualifications or exceptions; it is not an additional finding." : "Only the quoted text is available for this saved finding.", "meta"), excerpt);
+    card.append(details);
+  }
   return card;
 }
 
@@ -197,6 +237,13 @@ function checkedLine(read: Extract<DocumentResult, { status: "read" }>[]): HTMLE
 function unreadCard(d: Extract<DocumentResult, { status: "could_not_read" }>): HTMLElement {
   const card = el("div", undefined, "card");
   card.append(el("h2", KIND_LABEL[d.kind]), el("p", `Could not read this document. ${d.reason}`, "unread"));
+  if (d.url && /^https?:\/\//i.test(d.url)) {
+    const open = el("a", "Open policy in a tab");
+    open.href = d.url;
+    open.target = "_blank";
+    open.rel = "noopener noreferrer";
+    card.append(open);
+  }
   return card;
 }
 

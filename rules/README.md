@@ -1,10 +1,12 @@
 # Rules
 
-`rules.json` holds ClauseWatch's detection rules and `rules_fixtures.json` the sentences each rule must and must not match. This folder is the source of truth: a rule is changed here, by pull request, and released as a signed file that every extension checks.
+`rules.json` holds ClauseWatch's detection rules and `rules_fixtures.json` the sentences each rule must and must not match. This folder is the source of truth: English rules are changed here by pull request and distributed through verified signed updates or extension bundles. The limited Spanish/French packs ship with the extension.
 
-## The rules
+## The English rules
 
-Each rule finds sentences that say the thing below and quotes them. A sentence that denies it ("we do not…") is not a finding, and a finding is never a verdict on the service.
+The current source contains 19 English rules under 13 topics. This is not a statement that an unreleased version has been published.
+
+Each rule finds sentences that say the thing below and quotes them. A sentence containing only a denial ("we do not…") is not a finding; an explicit exception can disclose a conditional permission, and a finding is never a verdict on the service.
 
 | Rule | Topic | What it looks for |
 |---|---|---|
@@ -14,6 +16,7 @@ Each rule finds sentences that say the thing below and quotes them. A sentence t
 | `ownership-assignment` | `ip_assignment` | Ownership of what you submit assigned to the service. |
 | `perpetual-content-licence` | `ip_assignment` | A perpetual or irrevocable licence to your content. |
 | `sells-personal-data` | `data_sale` | Personal data sold or rented. |
+| `conditional-data-sale` | `data_sale` | An explicit exception to a denial that permits a sale to a recipient type or with consent. |
 | `shares-with-data-brokers` | `data_sale` | Personal data shared with data brokers. |
 | `changes-without-notice` | `unilateral_change` | Terms changed without telling you. |
 | `effective-on-posting` | `unilateral_change` | Changes taking effect as soon as they are posted. |
@@ -54,3 +57,9 @@ One difference the checks cannot see: JavaScript's `\s` also matches a non-break
 ## Releases
 
 Rule and known-site changes are merged by pull request. The GuardianVigil team then does a final review, signs and releases each rules version (tagged `rules-v<version>`). Extensions accept only releases signed with the key built into them, and only a newer version; the bundled copy keeps working offline. How a release is checked: [docs/reader.md](../docs/reader.md#the-signed-release).
+
+### Qualifications and conditional permissions
+
+`conditional-data-sale` also finds an explicit exception permitting a sale to a named recipient type or with consent. Scoped rules may recover a separately stated permission after a denial and an explicit contrast such as “but” or “except that”. The full original sentence is quoted, including the denial and exception. Generic legal rights descriptions alone do not establish a sale permission. Every matching sentence is retained, with nearby source context available in the report; the topic label is not a legal interpretation.
+
+Spanish and French packs, each version 1 with three rules, live in `es/` and `fr/`. Each includes its own version, declared categories, rules and invented positive/negative fixtures. `npm run check:rules` checks both packs with Go in addition to the English file. Coverage is deliberately limited to three topics per pack; the UI must not imply that the English topics were checked. These bundled files are not independent downloaded/signed releases. Maintainers review and ship them with the extension.

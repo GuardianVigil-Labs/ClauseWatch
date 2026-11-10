@@ -6,3 +6,7 @@ This product is licensed under the Apache License, Version 2.0 (LICENSE).
 It bundles the Geist and Geist Mono fonts, Copyright (c) 2023 Vercel, in
 collaboration with basement.studio, licensed under the SIL Open Font
 License 1.1 (public/fonts/OFL.txt).
+
+Policy reading also bundles PDF.js (Apache-2.0), tldts and tldts-core (MIT),
+and TinyLD (MIT). Their licence texts ship in the extension's licenses/
+directory. Domain matching includes the Public Suffix List's private section.

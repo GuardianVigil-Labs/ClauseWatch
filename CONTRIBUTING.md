@@ -2,7 +2,7 @@
 
 ClauseWatch is improved most by its detection rules and its list of known sites. Both are plain JSON files in `rules/`, checked by the tests, and anyone can propose a change.
 
-1. Read [POLICY.md](POLICY.md) and the maintainer guide, [AGENTS.md](AGENTS.md) (for people and AI tools alike).
+1. Read [POLICY.md](POLICY.md) and the maintainer guide, [AGENTS.md](AGENTS.md).
 2. Branch from `main` and open a pull request. Direct pushes to `main` are not accepted; every change needs a code owner's review.
 3. Before pushing, run:
    ```sh
@@ -12,19 +12,27 @@ ClauseWatch is improved most by its detection rules and its list of known sites.
    npm test
    npm run check:rules   # the known-sites schema, then every rule fixture in Go's engine (needs Go)
    ```
-   Changing the extension itself? Also `npm run build && npm run build:firefox && npm run check:manifest && npm run smoke`.
+   Changing the extension itself? Also run `npm run build`, `npm run build:firefox`, `npm run check:manifest`, `npm run size` and `npm run smoke`, plus the targeted mutation checks in [AGENTS.md](AGENTS.md#local-checks). Full setup instructions are in [development](docs/development.md).
 4. Every finding the extension shows must be an exact quote from the document. A change that shows a verdict, score or "safe" will not be merged.
 5. Test fixtures use invented text, `.example` domains and documentation addresses (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24). Never a real company's name or text in a test.
 
 ## Proposing a rule
 
-Follow [rules/README.md](rules/README.md): the rule in `rules/rules.json`, at least one sentence it must match and one near miss it must not in `rules/rules_fixtures.json`, and both checks green.
+Follow [rules/README.md](rules/README.md): the rule in `rules/rules.json`, at least one sentence it must match and one near miss it must not in `rules/rules_fixtures.json`, and both checks green. Spanish/French changes use their own `rules/<language>/rules.json` and fixture file; coverage must stay limited to the categories actually checked.
 
 ## Adding a known site
 
 Follow [docs/rules.md](docs/rules.md#known-sites): one entry in `rules/sites.json` with the service's domains and the exact addresses of its terms and privacy policy (and, optionally, its sign-up pages). Open each address in a private window first, and say in the pull request what you checked. Real public service addresses belong in `sites.json` only, never in tests.
 
 Rule and known-site changes are merged by pull request. The GuardianVigil team then does a final review, signs and releases each rules version, and installed extensions pick it up within a day. The extension accepts only releases signed with the key built into it.
+
+## Documentation and public review
+
+Keep the README, user guide, reader contract, architecture and privacy disclosures consistent with code changes. Document current behaviour and limits, not private plans or unrelated work. Store listing and website changes require their own publishing step; a repository edit does not publish them.
+
+Use only ClauseWatch project files and invented examples. Check new files as well as the tracked diff for private data, machine identifiers, credentials, internal links and author-attribution boilerplate. Do not include raw browser profiles, logs, private policy text, exports or environment output. Do not weaken disclosure guards. Follow [POLICY.md](POLICY.md); security reports use the private channel in [SECURITY.md](SECURITY.md).
+
+Submit changes through a code-owner-reviewed pull request. Use only an identity/account you are authorized to use; do not fabricate authorship. Release tags and publishing are separate maintainer actions. A documentation change is not authorization to commit, push or publish another contributor's work.
 
 ## Reporting a problem
 

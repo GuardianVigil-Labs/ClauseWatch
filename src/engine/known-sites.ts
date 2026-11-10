@@ -1,3 +1,4 @@
+import { getDomain } from "tldts";
 // Known sites (rules/sites.json): popular services mapped to the exact
 // addresses of their terms and privacy policy, and optionally their sign-up
 // pages. Signed with the rules, so an update carries both. On a known site
@@ -55,7 +56,7 @@ export const SHARED_DOMAINS = new Set([
 
 /** A lower-case public domain without "www.", not one shared by unrelated sites: what "domains" and "legalDomains" list. */
 const isDomain = (d: unknown): d is string =>
-  typeof d === "string" && d.length <= 253 && DOMAIN.test(d) && !d.startsWith("www.") && !localHost(d) && !/\.\d+$/.test(d) && !SHARED_DOMAINS.has(d);
+  typeof d === "string" && d.length <= 253 && DOMAIN.test(d) && !d.startsWith("www.") && !localHost(d) && !/\.\d+$/.test(d) && !SHARED_DOMAINS.has(d) && getDomain(d, { allowPrivateDomains: true }) !== null;
 
 /** An https address with no credentials, port or fragment, or null. */
 function httpsUrl(v: unknown): URL | null {

@@ -1,6 +1,8 @@
 name: release
 
-# A version tag (v*) runs every check and publishes the store packages; an
+# A version tag (v*) runs every check, publishes the store packages with a
+# build provenance attestation and, after approval in the browser-stores
+# environment, submits them to the Chrome, Edge and Firefox stores. An
 # extension release is never marked latest. A rules tag (rules-v*) runs the
 # rule checks and creates a draft release with rules.json and sites.json.
 # Installed extensions download releases/latest/download/rules.signed.json,
@@ -26,6 +28,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
+          package-manager-cache: false
       - run: npm ci
       - run: npm run leak-guard
       - run: npm run typecheck
@@ -49,22 +52,202 @@ jobs:
           include-hidden-files: true
           if-no-files-found: error
 
-  # Only this job may write, and only to create the release.
+  # Only this job may write, and only to attest the packages and create the
+  # release. It installs and runs nothing from the repository.
   publish:
     needs: package
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # Sign and record the build provenance attestation.
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: packages
           path: packages
+      # SLSA build provenance for every store ZIP; the bundle is attached to
+      # the release so it can be verified offline (docs/releasing.md).
+      - id: attest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: packages/*.zip
       - env:
           GH_TOKEN: ${{ github.token }}
-        run: >
-          gh release create "$GITHUB_REF_NAME" packages/*.zip packages/SHA256SUMS
-          --repo "$GITHUB_REPOSITORY" --title "ClauseWatch ${GITHUB_REF_NAME#v}" --notes-file packages/RELEASE_NOTES.md --latest=false
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          cp "$BUNDLE" packages/attestation.sigstore.json
+          gh release create "$GITHUB_REF_NAME" packages/*.zip packages/SHA256SUMS packages/attestation.sigstore.json \
+            --repo "$GITHUB_REPOSITORY" --title "ClauseWatch ${GITHUB_REF_NAME#v}" --notes-file packages/RELEASE_NOTES.md --latest=false
+
+  # Submits the exact packages from this run to each store, one matrix entry
+  # per store so a failure shows which store failed and can be re-run alone.
+  # The browser-stores environment holds the store secrets and its required
+  # reviewers approve each run. Pre-release tags (v1.2.0-rc.1) skip it. Opera
+  # has no upload API: its package is uploaded by hand from the release.
+  stores:
+    needs: [package, publish]
+    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
+    runs-on: ubuntu-latest
+    environment: browser-stores
+    timeout-minutes: 30
+    permissions: {}
+    strategy:
+      fail-fast: false
+      matrix:
+        store: [chrome, edge, firefox]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: packages
+          path: packages
+      - name: The packages match their checksums
+        working-directory: packages
+        run: sha256sum --check --strict SHA256SUMS
+
+      - name: Chrome Web Store
+        if: matrix.store == 'chrome'
+        timeout-minutes: 15
+        env:
+          CHROME_PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
+          CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+        run: |
+          missing=""
+          for v in CHROME_PUBLISHER_ID CHROME_EXTENSION_ID CHROME_CLIENT_ID CHROME_CLIENT_SECRET CHROME_REFRESH_TOKEN; do
+            [ -n "${!v}" ] || missing="$missing $v"
+          done
+          if [ -n "$missing" ]; then echo "::error::Chrome Web Store: missing secrets in the browser-stores environment:$missing"; exit 1; fi
+          zip=$(ls packages/*-chrome.zip)
+          out="$RUNNER_TEMP/chrome.json"
+          # The refresh token becomes a one-hour access token, masked in the log.
+          code=$(curl -sS -o "$out" -w '%{http_code}' --max-time 60 --retry 3 \
+            --data-urlencode "client_id=$CHROME_CLIENT_ID" --data-urlencode "client_secret=$CHROME_CLIENT_SECRET" \
+            --data-urlencode "refresh_token=$CHROME_REFRESH_TOKEN" --data-urlencode "grant_type=refresh_token" \
+            https://oauth2.googleapis.com/token)
+          if [ "$code" != 200 ]; then echo "::error::Chrome Web Store: token exchange failed, HTTP $code $(jq -r '.error // empty' "$out")"; exit 1; fi
+          token=$(jq -r '.access_token' "$out")
+          echo "::add-mask::$token"
+          rm "$out"
+          item="publishers/$CHROME_PUBLISHER_ID/items/$CHROME_EXTENSION_ID"
+          code=$(curl -sS -o "$out" -w '%{http_code}' --max-time 300 --retry 3 -X POST \
+            -H "Authorization: Bearer $token" -H "Content-Type: application/zip" -T "$zip" \
+            "https://chromewebstore.googleapis.com/upload/v2/$item:upload")
+          # Every response needs its documented HTTP status before any field is trusted.
+          if [ "$code" != 200 ]; then echo "::error::Chrome Web Store: upload refused, HTTP $code $(jq -r '.error.message // empty' "$out" 2>/dev/null)"; exit 1; fi
+          state=$(jq -r '.uploadState // .error.status // "unknown"' "$out")
+          echo "Chrome Web Store upload: HTTP $code, $state"
+          # A large package is processed asynchronously: poll for at most 10 minutes.
+          for _ in $(seq 60); do
+            [ "$state" = IN_PROGRESS ] || break
+            sleep 10
+            code=$(curl -sS -o "$out" -w '%{http_code}' --max-time 60 --retry 3 \
+              -H "Authorization: Bearer $token" "https://chromewebstore.googleapis.com/v2/$item:fetchStatus")
+            if [ "$code" != 200 ]; then echo "::error::Chrome Web Store: upload status failed, HTTP $code $(jq -r '.error.message // empty' "$out" 2>/dev/null)"; exit 1; fi
+            state=$(jq -r '.lastAsyncUploadState // .error.status // "unknown"' "$out")
+            echo "Chrome Web Store upload status: HTTP $code, $state"
+          done
+          if [ "$state" != SUCCEEDED ]; then echo "::error::Chrome Web Store: upload not accepted, HTTP $code $state $(jq -r '.error.message // empty' "$out")"; exit 1; fi
+          code=$(curl -sS -o "$out" -w '%{http_code}' --max-time 60 --retry 3 -X POST \
+            -H "Authorization: Bearer $token" -H "Content-Type: application/json" -d '{"publishType":"DEFAULT_PUBLISH"}' \
+            "https://chromewebstore.googleapis.com/v2/$item:publish")
+          if [ "$code" != 200 ]; then echo "::error::Chrome Web Store: publish refused, HTTP $code $(jq -r '.error.message // empty' "$out" 2>/dev/null)"; exit 1; fi
+          state=$(jq -r '.state // .error.status // "unknown"' "$out")
+          echo "Chrome Web Store publish: HTTP $code, $state"
+          case "$code $state" in
+            "200 PENDING_REVIEW" | "200 STAGED" | "200 PUBLISHED") ;;
+            *) echo "::error::Chrome Web Store: publish refused, HTTP $code $state $(jq -r '.error.message // empty' "$out")"; exit 1 ;;
+          esac
+
+      - name: Microsoft Edge Add-ons
+        if: matrix.store == 'edge'
+        timeout-minutes: 25
+        env:
+          EDGE_PRODUCT_ID: ${{ secrets.EDGE_PRODUCT_ID }}
+          EDGE_CLIENT_ID: ${{ secrets.EDGE_CLIENT_ID }}
+          EDGE_API_KEY: ${{ secrets.EDGE_API_KEY }}
+        run: |
+          missing=""
+          for v in EDGE_PRODUCT_ID EDGE_CLIENT_ID EDGE_API_KEY; do
+            [ -n "${!v}" ] || missing="$missing $v"
+          done
+          if [ -n "$missing" ]; then echo "::error::Edge Add-ons: missing secrets in the browser-stores environment:$missing"; exit 1; fi
+          zip=$(ls packages/*-chrome.zip)
+          api="https://api.addons.microsoftedge.microsoft.com/v1/products/$EDGE_PRODUCT_ID/submissions"
+          out="$RUNNER_TEMP/edge.json"
+          head="$RUNNER_TEMP/edge.headers"
+          auth=(-H "Authorization: ApiKey $EDGE_API_KEY" -H "X-ClientID: $EDGE_CLIENT_ID")
+          # Upload and publish each answer 202 with the operation in Location.
+          operation() {
+            local code op
+            code=$(curl -sS -o "$out" -D "$head" -w '%{http_code}' --max-time "$1" --retry 3 "${auth[@]}" "${@:2}")
+            op=$(grep -i '^location:' "$head" | tail -n 1 | tr -d '\r' | sed 's/^[^:]*: *//; s|.*/||')
+            echo "Edge Add-ons ${label}: HTTP $code" >&2
+            if [ "$code" != 202 ] || ! [[ "$op" =~ ^[A-Za-z0-9-]+$ ]]; then
+              echo "::error::Edge Add-ons: $label refused, HTTP $code $(jq -r '.message // empty' "$out" 2>/dev/null)" >&2
+              return 1
+            fi
+            echo "$op"
+          }
+          # Polls an operation for at most 20 minutes.
+          wait_for() {
+            local code status
+            for _ in $(seq 120); do
+              code=$(curl -sS -o "$out" -w '%{http_code}' --max-time 60 --retry 3 "${auth[@]}" "$1")
+              if [ "$code" != 200 ]; then
+                echo "::error::Edge Add-ons: $label status failed, HTTP $code $(jq -r '.message // empty' "$out" 2>/dev/null)"
+                return 1
+              fi
+              status=$(jq -r '.status // "unknown"' "$out")
+              case "$status" in
+                Succeeded) echo "Edge Add-ons $label: $status"; return 0 ;;
+                InProgress) sleep 10 ;;
+                *) echo "::error::Edge Add-ons: $label failed, HTTP $code $status $(jq -r '[.errorCode, .message] | map(select(.)) | join(": ")' "$out")"; return 1 ;;
+              esac
+            done
+            echo "::error::Edge Add-ons: $label still in progress after 20 minutes"
+            return 1
+          }
+          label=upload
+          op=$(operation 300 -X POST -H "Content-Type: application/zip" -T "$zip" "$api/draft/package")
+          wait_for "$api/draft/package/operations/$op"
+          label=publish
+          notes=$(jq -n --arg n "ClauseWatch $GITHUB_REF_NAME. Source: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY" '{notes: $n}')
+          op=$(operation 60 -X POST -H "Content-Type: application/json" -d "$notes" "$api")
+          wait_for "$api/operations/$op"
+
+      - if: matrix.store == 'firefox'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      # web-ext submits a listed version with the source ZIP Mozilla's
+      # reviewers rebuild from. It does not wait for review.
+      - name: Firefox Add-ons
+        if: matrix.store == 'firefox'
+        timeout-minutes: 20
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
+          WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+          # No install scripts from web-ext's dependencies.
+          npm_config_ignore_scripts: "true"
+        run: |
+          missing=""
+          [ -n "$WEB_EXT_API_KEY" ] || missing="$missing AMO_JWT_ISSUER"
+          [ -n "$WEB_EXT_API_SECRET" ] || missing="$missing AMO_JWT_SECRET"
+          if [ -n "$missing" ]; then echo "::error::Firefox Add-ons: missing secrets in the browser-stores environment:$missing"; exit 1; fi
+          # web-ext signs a directory: the Firefox ZIP's exact contents.
+          unzip -q packages/*-firefox.zip -d "$RUNNER_TEMP/firefox"
+          npx --yes web-ext@10.8.0 sign --channel listed \
+            --source-dir "$RUNNER_TEMP/firefox" --artifacts-dir "$RUNNER_TEMP/web-ext" \
+            --upload-source-code "$(ls packages/*-sources.zip)" \
+            --approval-timeout 0 --timeout 900000
 
   # rules-v<N>: the checks, with read access only, then a draft release with
   # rules.json and sites.json (docs/releasing.md).
@@ -79,6 +262,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
+          package-manager-cache: false
       - run: npm ci
       - run: npm run leak-guard
       - run: npm run typecheck

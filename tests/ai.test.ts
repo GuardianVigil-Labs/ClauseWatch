@@ -3,14 +3,14 @@ import { validateAiFindings } from "../src/ai/validate";
 import { aiFindings, buildPrompt } from "../src/ai/assist";
 import type { DocumentResult } from "../src/engine/documents";
 
-const body = "Welcome to the service.\\n\\nWe may use the content you upload to train our machine learning models and improve them.\\n\\nYou can close your account at any time from your settings page.";
+const body = "Welcome to the service.\n\nWe may use the content you upload to train our machine learning models and improve them.\n\nYou can close your account at any time from your settings page.";
 const known = ["ai_training", "arbitration"];
 
 describe("validateAiFindings", () => {
   it("keeps a finding that quotes the document exactly, whatever the spacing", () => {
     const raw = 'Here you go: [{"category":"ai_training","quote":"We may use the content you upload to train our   machine learning models and improve them.","explanation":"Your uploads may train AI."}]';
     expect(validateAiFindings(raw, body, known, 8)).toEqual([
-      { category: "ai_training", quote: "We may use the content you upload to train our machine learning models and improve them.", explanation: "Your uploads may train AI." },
+      { category: "ai_training", quote: "We may use the content you upload to train our machine learning models and improve them.", explanation: "" },
     ]);
   });
   it("drops paraphrases, unknown categories, short quotes and duplicates of what the rules found", () => {

@@ -15,6 +15,15 @@ import { defineConfig } from "wxt";
 //   hosts send no CORS headers, so the extension needs access to both.
 const RULES_HOSTS = ["https://github.com/*", "https://release-assets.githubusercontent.com/*"];
 
+const pdfjsGlobalThis = () => ({
+  name: "pdfjs-global-this",
+  transform(code: string, id: string) {
+    if (!id.includes("pdfjs-dist/legacy/build/")) return null;
+    const out = code.replaceAll("Function('return this')()", "globalThis");
+    return out === code ? null : { code: out, map: null };
+  },
+});
+
 export default defineConfig({
   srcDir: ".",
   // Store packages. The source zip lets Firefox's reviewers rebuild the
@@ -24,6 +33,10 @@ export default defineConfig({
     excludeSources: ["**/*.test.ts"],
   },
   entrypointsDir: "entrypoints",
+  // PDF.js's legacy build bundles core-js, whose last-resort global lookup is
+  // Function("return this")(). Every supported browser has globalThis, so the
+  // fallback is replaced and no string-to-code call ships (check-manifest.mjs).
+  vite: () => ({ plugins: [pdfjsGlobalThis()], worker: { plugins: () => [pdfjsGlobalThis()] } }),
   manifest: ({ browser }) => ({
     name: "ClauseWatch",
     description: "Shows what a service's terms and privacy policy say, quoted, at sign-up.",
@@ -66,6 +79,9 @@ export default defineConfig({
     // The licence travels with the installed extension, not only the source zip.
     "build:publicAssets": (wxt, assets) => {
       for (const f of ["LICENSE", "NOTICE"]) assets.push({ absoluteSrc: resolve(wxt.config.root, f), relativeDest: f });
+      for (const [pkg, file] of [["tldts", "LICENSE"], ["tldts-core", "LICENSE"], ["tinyld", "license"], ["pdfjs-dist", "LICENSE"]]) {
+        assets.push({ absoluteSrc: resolve(wxt.config.root, "node_modules", pkg!, file!), relativeDest: `licenses/${pkg}.txt` });
+      }
     },
   },
 });

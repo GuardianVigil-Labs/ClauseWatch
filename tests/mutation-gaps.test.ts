@@ -19,37 +19,23 @@ const own = (over: Partial<OwnRule> = {}): OwnRule => ({
   category: "auto_renewal",
   all: ["\\bpayments?\\b"],
   none: ["\\bnot\\b"],
-  examples: { match: ["All payments are final."], noMatch: ["Payments are not final."] },
+  examples: { match: ["All payments for this subscription are final after purchase."], noMatch: ["Payments are not final."] },
   ...over,
 });
 
 afterEach(() => vi.restoreAllMocks());
 
 describe("unsigned rules when re2js cannot read a pattern", () => {
-  it("a must-not-match that fails always excludes, a must-match that fails never matches: the rule finds nothing", () => {
-    const rule = compileUnsigned({ id: "x", category: "ai_training", all: ["\\btrain\\b"], none: ["\\bnot\\b"] }, known, { parse: false });
-    const spy = vi.spyOn(RE2JS, "compile").mockImplementation(() => {
-      throw new Error("unreadable");
-    });
-    expect(rule.all[0]!.test("we train models")).toBe(false);
-    expect(rule.none[0]!.test("we train models")).toBe(true);
-    // Compiled once, then remembered as unreadable.
-    rule.all[0]!.test("again");
-    expect(spy).toHaveBeenCalledTimes(2);
-  });
-
-  it("by default a pattern is parsed when the rule is written, so a mistake is named at once", () => {
+  it("a pattern is parsed when the rule is written, so a mistake is named at once", () => {
     vi.spyOn(RE2JS, "compile").mockImplementation(() => {
       throw new Error("unreadable");
     });
     expect(() => compileUnsigned({ id: "x", category: "ai_training", all: ["\\btrain\\b"], none: [] }, known)).toThrow(/not a valid regular expression/);
-    // Loading rules for a page parses nothing up front.
-    expect(() => compileUnsigned({ id: "x", category: "ai_training", all: ["\\btrain\\b"], none: [] }, known, { parse: false })).not.toThrow();
   });
 
-  it("loading rules for a page compiles nothing until a sentence is tested", () => {
+  it("loading switched-off own rules does not compile their patterns", () => {
     const spy = vi.spyOn(RE2JS, "compile");
-    mergeRules(base, { disabled: [], own: [own()] });
+    mergeRules(base, { disabled: ["own-x"], own: [own()] });
     expect(spy).not.toHaveBeenCalled();
   });
 });
@@ -68,7 +54,7 @@ describe("rule limits, both sides", () => {
     expect(ownRuleProblem(null as never, known)).toBe("Not a rule.");
     expect(ownRuleProblem({ ...own(), examples: { match: ["x"] } } as never, known)).toMatch(/add the example/);
     expect(ownRuleProblem({ ...own(), examples: undefined } as never, known)).toMatch(/add the example/);
-    expect(ownRuleProblem(own({ examples: { match: ["All payments are final."], noMatch: [] } }), known)).toMatch(/at least one/);
+    expect(ownRuleProblem(own({ examples: { match: ["All payments for this subscription are final after purchase."], noMatch: [] } }), known)).toMatch(/at least one/);
   });
 
   it("a name of 120 characters is allowed, 121 refused", () => {
@@ -77,7 +63,7 @@ describe("rule limits, both sides", () => {
   });
 
   it("10 examples of each kind are allowed, 11 refused, either kind", () => {
-    const yes = Array.from({ length: 10 }, (_, i) => `Payments ${i} are final.`);
+    const yes = Array.from({ length: 10 }, (_, i) => `Payments ${i} for this subscription are final after purchase.`);
     const no = Array.from({ length: 10 }, (_, i) => `Payments ${i} are not final.`);
     expect(ownRuleProblem(own({ examples: { match: yes, noMatch: no } }), known)).toBeNull();
     expect(ownRuleProblem(own({ examples: { match: [...yes, "Payments are final too."], noMatch: no } }), known)).toMatch(/at most 10/);
@@ -85,7 +71,7 @@ describe("rule limits, both sides", () => {
   });
 
   it("an example of 1000 characters is allowed, 1001 refused", () => {
-    const long = (n: number) => "Payments are final " + "x".repeat(n - "Payments are final ".length);
+    const long = (n: number) => "All payments for this subscription are final after purchase " + "x".repeat(n - "All payments for this subscription are final after purchase ".length);
     expect(ownRuleProblem(own({ examples: { match: [long(1000)], noMatch: ["Payments are not final."] } }), known)).toBeNull();
     expect(ownRuleProblem(own({ examples: { match: [long(1001)], noMatch: ["Payments are not final."] } }), known)).toMatch(/too long/);
   });
@@ -132,11 +118,12 @@ describe("other edges", () => {
     expect(validateAiFindings("[] then " + finding, body, ["ai_training"], 8)).toHaveLength(1);
   });
 
-  it("a summary sentence of 300 characters is kept, while one of 301 and an empty one are dropped", () => {
-    const s = (n: number) => "The service may share " + "data ".repeat(100).slice(0, n - "The service may share .".length) + ".";
-    expect(validateSummary(JSON.stringify([{ text: s(300), quotes: [1] }]), 1)).toHaveLength(1);
-    expect(validateSummary(JSON.stringify([{ text: s(301), quotes: [1] }]), 1)).toHaveLength(0);
-    expect(validateSummary(JSON.stringify([{ text: "   ", quotes: [1] }]), 1)).toHaveLength(0);
+  it("a summary keeps complete source sentences up to the batch limit, without truncation", () => {
+    const sentence = (n: number) => "The service may share " + "x".repeat(n - "The service may share .".length) + ".";
+    const raw = (text: string) => JSON.stringify([{ text, quotes: [1] }]);
+    expect(validateSummary(raw(sentence(24000)), [sentence(24000)])).toHaveLength(1);
+    expect(validateSummary(raw(sentence(24001)), [sentence(24001)])).toHaveLength(0);
+    expect(validateSummary(raw("   "), [sentence(100)])).toHaveLength(0);
   });
 });
 

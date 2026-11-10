@@ -8,16 +8,20 @@ This repository is public. Every file, commit message, branch name, issue, pull 
 
 | Path | What it holds |
 |---|---|
-| `entrypoints/` | The extension's entry points (WXT): `background.ts` (service worker), `popup/`, `options/` (Settings), `welcome/` (first-run setup), `signup.content.ts` (automatic mode's card). |
+| `entrypoints/` | The extension's entry points (WXT): `background.ts` (service worker), `popup/`, `options/` (Settings), `welcome/` (first-run setup), `signup.content.ts` (automatic mode's card), `signup-frame.content.ts` (its small frame check). |
 | `src/engine/` | Reading documents and matching rules: `document.ts` (HTML to text blocks), `documents.ts` (finding and recognising terms and privacy pages), `rules.ts`, `rule-set.ts`, `pattern-check.ts`, `known-sites.ts`, `verify.ts`, `rules-update.ts`, `trusted-keys.ts`, `bundled.ts`. |
+| `src/scan/` | Independent recoverable scan jobs and permission-aware clients. |
+| `src/storage-retention.ts` | Expiry of saved quote reports and opt-in policy versions. |
 | `src/auto/` | Automatic mode: sign-up form detection and remembered documents. |
 | `src/ai/` | Optional AI help: prompts, quote validation, the summary, the verdict filter. |
 | `src/ui/` | Shared UI: the report, Scan a link, sharing, data requests, quiet sites, the theme. |
-| `rules/` | `rules.json`, `rules_fixtures.json`, `sites.json`: the source of truth for detection rules and known sites. |
+| `rules/` | `rules.json`, `rules_fixtures.json`, `sites.json`, and limited `es/`/`fr/` packs: detection rules, fixtures and known sites. |
 | `tests/` | Vitest suites; `tests/fixtures/reader-parity.json` for the reader contract. |
 | `tools/rulecheck/` | Runs every rule fixture through Go's RE2 engine. |
 | `scripts/` | Checks and tooling: leak guard, manifest check, known-sites check, bundle size, smoke test, mutation testing, packaging. |
 | `docs/` | User and developer documentation, published with GitHub Pages. |
+
+Local setup: [docs/development.md](docs/development.md).
 
 How it fits together: [docs/architecture.md](docs/architecture.md).
 
@@ -43,7 +47,7 @@ The leak guard scans tracked files only, so stage new files with `git add` befor
 
 ## Rules and known sites
 
-- A rule change edits `rules/rules.json` and adds fixtures to `rules/rules_fixtures.json`: at least one invented sentence the rule must match and one near miss it must not. Both `npm test` and `npm run check:rules` must pass. See [rules/README.md](rules/README.md).
+- A rule change edits `rules/rules.json` and adds fixtures to `rules/rules_fixtures.json`: at least one invented sentence the rule must match and one near miss it must not. Both `npm test` and `npm run check:rules` must pass. Language-pack edits update their own `rules/<language>/` rule and fixture files, with the same checks. See [rules/README.md](rules/README.md).
 - A known-site change edits `rules/sites.json`, sorted by `id`. Open every address in a private window first, and say in the pull request what you checked. See [docs/rules.md](docs/rules.md#known-sites).
 - Never use a real company's text in a test or fixture. Real public service addresses belong only in `sites.json`.
 - Rule and known-site changes are merged by pull request. The GuardianVigil team does a final review, signs and releases each rules version; the extension accepts only releases signed with the key built into it.
@@ -51,7 +55,8 @@ The leak guard scans tracked files only, so stage new files with `git add` befor
 ## What the product must keep
 
 - Every finding is an exact quote from the document. Never a verdict, a score or "safe".
-- Nothing leaves the device except the daily signed-rules download from GitHub and, when the user turns it on, AI help with their own key.
+- Policy text is processed on the device. Network activity is limited to requested policy retrieval, signed-rule downloads, and explicitly requested external AI help with the user's key. No telemetry or automatic export uploads.
+- Document current product behaviour and retention in the public user/developer guides. Never add internal goals, other-project material, machine identifiers or environment logs.
 - No secret may depend on the extension's code staying hidden.
 - No account, no telemetry, no tracking.
 

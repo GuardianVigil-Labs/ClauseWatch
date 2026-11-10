@@ -33,12 +33,12 @@ describe("the report's cards", () => {
     expect(cards[0]!.querySelector(".initial")!.textContent).toBe("S");
     expect(cards[1]!.querySelector("blockquote")!.textContent).toBe("“We train models on your content.”");
     expect(cards[1]!.querySelector(".badge")!.textContent).toBe("AI training");
-    expect(cards[1]!.querySelector("a")!.getAttribute("href")).toBe("https://service.example/terms");
+    expect(cards[1]!.querySelector("a")!.getAttribute("href")).toBe("https://service.example/terms#:~:text=We%20train%20models%20on%20your%20content.");
     cards[2]!.querySelector("button")!.click();
     expect(onQuote).toHaveBeenCalledWith("terms", "Disputes go to arbitration.");
     expect(cards[3]!.textContent).toContain("Not found: Sale or brokering of personal data");
     expect(cards[3]!.querySelector("a")!.getAttribute("href")).toBe("https://service.example/terms");
-    expect(cards[1]!.querySelector(".allows")!.textContent).toContain("train or improve AI models");
+    expect(cards[1]!.querySelector(".allows")!.textContent).toContain("quoted conditions and exceptions");
     expect(reportCards({ site: "service.example", documents: [terms], siteCard: false })[0]!.className).toBe("card finding red");
     expect(cards[3]!.textContent).not.toContain("AI training on your content");
     expect(cards[4]!.textContent).toContain("Could not read this document. It needs sign-in.");

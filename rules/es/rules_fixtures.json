@@ -1,0 +1,48 @@
+{
+  "fixtures": {
+    "es-data-sale": {
+      "match": [
+        "Podemos vender sus datos personales a nuestros socios comerciales con su consentimiento.",
+        "Podemos vender sus datos personales a nuestros socios comerciales si usted no se opone a ello."
+      ],
+      "noMatch": [
+        "No vendemos sus datos personales a nuestros socios comerciales en ninguna circunstancia.",
+        "Nunca vendemos sus datos personales a terceros ni a nuestros socios comerciales.",
+        "Jamás vendemos sus datos personales a terceros ni a nuestros socios comerciales.",
+        "Tampoco vendemos sus datos personales a nuestros socios comerciales ni a terceros.",
+        "No compartimos ni vendemos sus datos personales a nuestros socios comerciales.",
+        "No les vendemos sus datos personales a nuestros socios comerciales en ningún caso."
+      ]
+    },
+    "es-renewal": {
+      "match": [
+        "Su suscripción se renueva automáticamente cada mes hasta que usted la cancele.",
+        "Su suscripción se renueva automáticamente cada mes si usted no la cancela antes de la fecha."
+      ],
+      "noMatch": [
+        "Su suscripción no se renueva automáticamente cuando termina el período contratado.",
+        "Su plan nunca se renovará automáticamente sin una nueva confirmación de su parte.",
+        "Su suscripción jamás se renueva automáticamente sin una nueva confirmación de su parte.",
+        "Su plan tampoco se renovará automáticamente al terminar el período de prueba gratuito."
+      ]
+    },
+    "es-arbitration": {
+      "match": [
+        "Todas las controversias se resolverán mediante arbitraje vinculante conforme a este acuerdo.",
+        "Todas las controversias que no se resuelvan de manera informal se resolverán mediante arbitraje vinculante.",
+        "Todas las controversias se resolverán mediante arbitraje vinculante y no ante los tribunales ordinarios.",
+        "Si las partes no llegan a un acuerdo, todas las controversias se resolverán mediante arbitraje vinculante.",
+        "Ninguna de las controversias queda excluida del arbitraje obligatorio conforme a este acuerdo."
+      ],
+      "noMatch": [
+        "Las controversias no requieren arbitraje obligatorio y pueden resolverse ante los tribunales.",
+        "Las controversias no estarán sujetas a arbitraje obligatorio y podrán resolverse ante los tribunales.",
+        "Todas las controversias jamás se resolverán mediante arbitraje vinculante conforme a este acuerdo.",
+        "Las controversias nunca serán sometidas a arbitraje obligatorio y podrán resolverse ante los tribunales.",
+        "Las controversias tampoco estarán sujetas a arbitraje vinculante según este acuerdo de servicio.",
+        "Las controversias no se someten a mediación ni se resolverán mediante arbitraje obligatorio.",
+        "Ninguna de las controversias se someterá a arbitraje vinculante conforme a este acuerdo."
+      ]
+    }
+  }
+}

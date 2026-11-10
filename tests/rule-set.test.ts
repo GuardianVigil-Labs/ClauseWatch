@@ -11,7 +11,7 @@ const own = (over: Partial<OwnRule> = {}): OwnRule => ({
   category: "auto_renewal",
   all: ["\\bpayments?\\b", "\\bcryptocurrenc(y|ies)\\b"],
   none: ["\\bnot\\b"],
-  examples: { match: ["All payments are made in cryptocurrency."], noMatch: ["Payments are not made in cryptocurrency."] },
+  examples: { match: ["All payments for this subscription are made in cryptocurrency."], noMatch: ["Payments are not made in cryptocurrency."] },
   ...over,
 });
 const ids = (r: { rules: { id: string }[] }) => r.rules.map((x) => x.id);
@@ -53,7 +53,7 @@ describe("the rule set", () => {
   it("checks an own rule's examples before it is saved", () => {
     expect(ownRuleProblem(own(), known)).toBeNull();
     expect(ownRuleProblem(own({ examples: { match: ["Nothing about money."], noMatch: ["x"] } }), known)).toMatch(/does not match/);
-    expect(ownRuleProblem(own({ examples: { match: ["All payments are made in cryptocurrency."], noMatch: ["Every payment is in cryptocurrency."] } }), known)).toMatch(/must not/);
+    expect(ownRuleProblem(own({ examples: { match: ["All payments for this subscription are made in cryptocurrency."], noMatch: ["Every payment for this subscription is made in cryptocurrency."] } }), known)).toMatch(/must not/);
     expect(ownRuleProblem(own({ examples: { match: [], noMatch: [] } }), known)).toMatch(/at least one/);
     expect(ownRuleProblem(own({ title: " " }), known)).toMatch(/name/);
   });
@@ -101,7 +101,7 @@ describe("the rule set", () => {
     const many = Array.from({ length: 250 }, (_, i) => own({ id: `own-${i}`, all: ["a", "b", "c", "d"], none: [] }));
     const merged = mergeRules(base, { disabled: [], own: many });
     expect(merged.rules.length - base.rules.length).toBe(MAX_UNSIGNED_PATTERNS / 4);
-    expect(merged.skipped.length).toBe(200 - MAX_UNSIGNED_PATTERNS / 4);
+    expect(merged.skipped.length).toBe(250 - MAX_UNSIGNED_PATTERNS / 4);
   });
 
   it("leaves out a topic whose every rule is switched off, so it is never reported as not found", () => {
@@ -111,14 +111,15 @@ describe("the rule set", () => {
     expect(mergeRules(base, { disabled: ["binding-arbitration"], own: [] }).categories).toContain("arbitration");
   });
 
-  it("a must-not-match pattern re2js cannot read makes the rule find nothing, never too much", () => {
-    const rule = compileUnsigned({ id: "x", category: "ai_training", all: ["\\btrain\\b"], none: ["[[:alpha:]]"] }, known, { parse: false });
-    expect(rule.all.every((p) => p.test("we train models")) && !rule.none.some((p) => p.test("we train models"))).toBe(false);
+  it("an own rule with a pattern re2js cannot read is left out, never run", () => {
+    const merged = mergeRules(base, { disabled: [], own: [own({ id: "own-unreadable", all: ["\\btrain\\b"], none: ["[[:foo:]]"] })] });
+    expect(merged.skipped).toEqual(["own-unreadable"]);
+    expect(merged.rules.map((r) => r.id)).not.toContain("own-unreadable");
   });
 
   it("refuses an import with a non-rule entry or an empty example", () => {
     expect(() => parseImport(JSON.stringify({ rules: [null] }), known)).toThrow(/not a rule/);
-    const blank = { ...own(), examples: { match: ["All payments are made in cryptocurrency."], noMatch: [" "] } };
+    const blank = { ...own(), examples: { match: ["All payments for this subscription are made in cryptocurrency."], noMatch: [" "] } };
     expect(() => parseImport(JSON.stringify({ rules: [blank] }), known)).toThrow(/empty/);
   });
 });

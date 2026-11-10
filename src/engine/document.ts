@@ -139,7 +139,7 @@ export function htmlToBlocks(html: string): string[] {
     if (node.nodeType !== Node.ELEMENT_NODE) continue;
     const tag = (node as Element).localName;
     const skipped = SKIPPED.has(tag);
-    if (skipped || overlay(node as Element)) {
+    if (skipped || hiddenElement(node as Element) || overlay(node as Element)) {
       // Text on either side of a skipped block, banner or form never runs together.
       if (BLOCKS.has(tag) || tag === "form" || !skipped) flush();
       continue;
@@ -194,3 +194,10 @@ export function buildDocument(blocks: string[]): Document {
 }
 
 export const wordCount = (doc: Document) => doc.body.split(/\s+/).filter(Boolean).length;
+
+/** Static HTML has no computed layout. Explicit hidden markers and inline CSS are excluded. */
+export function hiddenElement(el: Element): boolean {
+  if (el.hasAttribute("hidden") || el.getAttribute("aria-hidden")?.trim().toLowerCase() === "true") return true;
+  const style = (el as HTMLElement).style;
+  return style?.display === "none" || ["hidden", "collapse"].includes(style?.visibility ?? "") || style?.getPropertyValue("content-visibility") === "hidden";
+}

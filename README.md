@@ -1,89 +1,89 @@
 # ClauseWatch
 
-A free, open-source browser extension that shows what a service's terms of service and privacy policy say, quoted from the documents themselves, at the moment you sign up.
+ClauseWatch is GuardianVigil's open-source browser extension for reading terms of service and privacy policies. It shows exact source quotes about topics such as data sale, automatic renewal and arbitration. A topic label is not a legal interpretation, and “not found” does not mean “safe”.
 
-- **On your device:** no account, no tracking, no telemetry. It works offline with the rules it ships with.
-- **Quote or nothing:** every finding is an exact sentence from the document. "Not found" and "could not read" are shown as such, never as "safe". Quotes from the documents, not legal advice.
-- **Open rules:** the detection rules and the list of known sites live in this repository, improved by pull request. The GuardianVigil team signs each rules release, and the extension accepts only releases signed with the key built into it.
+- Reads documents on your device, with no account or telemetry.
+- Supports downloaded HTML, rendered policy tabs, pasted or selected text, and text-based PDFs.
+- Keeps link scans running after the popup closes, with progress, cancellation and retry.
+- Offers optional AI help, local policy comparisons, report exports and previewed diagnostics.
 
-Version 1.0.0. By GuardianVigil: https://guardianvigil.io/clausewatch
+By [GuardianVigil](https://guardianvigil.io/clausewatch). Apache License 2.0.
 
-![The ClauseWatch popup quoting a sign-up page's terms](docs/store/screenshot-1-popup-quotes.png)
+**Documentation scope:** these pages describe the current source checkout. Changes listed under [Unreleased](CHANGELOG.md#unreleased) are not a published release. The package version is `1.0.0`; the source bundles English rules version 4 and Spanish/French packs version 1. Check the [release notes](https://github.com/GuardianVigil-Labs/ClauseWatch/releases) for a particular published build.
 
-## Install
+![ClauseWatch quoting a policy](docs/store/screenshot-1-popup-quotes.png)
 
-Store links will be added here: Chrome Web Store, Microsoft Edge Add-ons, Firefox Add-ons and Opera add-ons (Brave and Vivaldi install from the Chrome Web Store).
+The screenshots illustrate the earlier interface and do not show every control in the current source.
 
-To build from source (Node.js 24):
+## Build and load
+
+Use Node.js 24 and npm. Run from the repository root:
 
 ```sh
 npm ci
-npm run build            # Chrome, Edge, Opera, Brave, Vivaldi: .output/chrome-mv3
-npm run build:firefox    # Firefox: .output/firefox-mv3
+npm run build
+npm run build:firefox
 ```
 
-Then load it unpacked: in Chrome, `chrome://extensions` → **Developer mode** → **Load unpacked** → `.output/chrome-mv3`; in Firefox, `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** → `.output/firefox-mv3/manifest.json`.
+| Browser | Build directory | Load from source |
+|---|---|---|
+| Chrome, Edge, Opera, Brave, Vivaldi | `.output/chrome-mv3` | Open the browser's extension manager, enable developer mode and choose **Load unpacked**. |
+| Firefox | `.output/firefox-mv3` | Open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**, then select `manifest.json`. |
 
-## Screenshots
+The manifest requires Chrome 137 or later, Firefox 140 or later, and Firefox Android 142 or later. Store installation, temporary-add-on behaviour and built-in model availability depend on the browser. Go is needed for contributor rule checks, not for building the extension. See [development](docs/development.md).
 
-| | |
+## Read a policy
+
+1. Open a service's page and click ClauseWatch.
+2. In **This site**, choose the policies to read and grant the requested site access. Known services use the addresses in `rules/sites.json`.
+3. Review each quote, its source, coverage notices and **Show surrounding text**.
+
+For a direct address or pasted policy, use **Scan a link**. **Open persistent scan screen** opens the same controls in a browser tab. Background scan payloads expire ten minutes after creation; **Latest report** separately retains the last displayed web-policy quote report for seven days. **Check again** starts a fresh scan with the necessary permission.
+
+For JavaScript-loaded, protected or sign-in-dependent policies, open the policy yourself, wait for it to load, then open ClauseWatch on that tab and choose **Read visible policy**. Manual document selection can bypass an unrecognised title; it does not verify that the policy is complete. The extension does not sign in or activate page controls for you.
+
+Text-based PDF extraction runs locally. External policy links are fetched only after selection and host permission. **Highlight quote in policy** uses browser text-fragment support; copy and search the quote when highlighting is unavailable.
+
+## Coverage and limits
+
+| Area | Current behaviour |
 |---|---|
-| ![Scan a link](docs/store/screenshot-2-scan-a-link.png) | ![Automatic mode's card beside a sign-up form](docs/store/screenshot-3-automatic-card.png) |
-| ![Check selected text from the right-click menu](docs/store/screenshot-4-right-click.png) | ![Settings, Rules](docs/store/screenshot-5-settings.png) |
+| English | 19 bundled rules under 13 topics; newer verified signed English releases can replace them. |
+| Spanish and French | Three rules per bundled language pack: data sale, automatic renewal and arbitration. Other topics are not presented as checked. |
+| Other or uncertain languages | Coverage is labelled. Other languages are checked with the English rules only; uncertain text, or a language known only from the page's markup, uses the English rules (with the Spanish or French pack where it applies) and a notice. |
+| Downloads | At most 2 MiB per request, a 20-second deadline and checked redirects. Sites requiring browser execution or authentication need the tab fallback. |
+| PDFs | Text-based policies only: at most 100 pages, 200,000 extracted characters and 15 seconds of extraction. No OCR. |
+| Source verification | Quotes and nearby context are retained. Matching is bounded pattern detection, not complete legal interpretation. |
 
-## Privacy
+See the [user guide](docs/user-guide.md) for complete workflows and limitations.
 
-Nothing about you leaves your device. ClauseWatch makes one request of its own: a daily download of the signed rules release from this repository's GitHub releases, with no account, identifier or cookie. If you turn on AI help with your own API key, the text you ask about goes to the AI service you chose. No account, no tracking, no telemetry, no advertising. The full policy: [docs/PRIVACY.md](docs/PRIVACY.md).
+## Optional features and privacy
+
+Automatic mode starts only after setup or Settings enables it and the browser grants site access. It recognises form structure without reading field values. Disabling it stops already-injected scripts and automatic reads. Failed policies remain retryable; only a complete terms-and-privacy read quiets the site for a week.
+
+AI help is off by default. A built-in model processes policy text on the device. With your own API key, the selected service receives the text you ask about. Long documents use visible batches of at most 24,000 source characters. AI findings must preserve complete source units; summaries select source sentences rather than generate new claims. Requests have cancellation, retry and a 90-second deadline. Changing the endpoint or path requires an explicit credential choice.
+
+Policy comparisons are also off by default. Enabling and remembering a version stores bounded policy text locally for exact paragraph comparisons. Report exports deliberately include source URLs and quotes; diagnostic previews exclude them. Neither is uploaded automatically.
+
+ClauseWatch downloads policies from their hosts and signed rule updates from GitHub. It has no telemetry service. Full storage limits, network behaviour and export details are in the [privacy policy](docs/PRIVACY.md).
 
 ## Documentation
 
-- [User guide](docs/user-guide.md): setup, reading a site, known sites, the right-click menu, the card, AI help, rules, data requests.
-- [Detection rules and known sites](docs/rules.md), [the rule list](rules/README.md) and [the reader contract](docs/reader.md).
-- [Architecture](docs/architecture.md): entry points, the engine, rules updates, permissions.
-- [Privacy](docs/PRIVACY.md), [security reports](SECURITY.md), [changelog](CHANGELOG.md), [code of conduct](CODE_OF_CONDUCT.md).
-- For maintainers: [releasing](docs/releasing.md), [the real-browser checklist](docs/browser-checklist.md), [store listing](docs/STORE_LISTING.md), [maintainer guide](AGENTS.md).
+| Audience | Start here |
+|---|---|
+| Users | [User guide](docs/user-guide.md), [privacy](docs/PRIVACY.md), [rules and coverage](docs/rules.md) |
+| Developers | [Development](docs/development.md), [architecture](docs/architecture.md), [reader contract](docs/reader.md), [rule fixtures](rules/README.md) |
+| Contributors | [Contributing](CONTRIBUTING.md), [repository policy](POLICY.md), [security reporting](SECURITY.md) |
+| Maintainers | [Release guide](docs/releasing.md), [browser checklist](docs/browser-checklist.md), [store listing](docs/STORE_LISTING.md) |
 
-The documentation is also published as a site from `docs/` with GitHub Pages.
-
-## How it works
-
-- **This site.** Click the toolbar button. ClauseWatch reads the page you are on (it holds no site access until you click), finds its terms and privacy links, and on your say-so asks for that one site, reads the documents on your device and gives the access back.
-- **Known sites.** For about 45 popular AI and software services, `rules/sites.json` names the exact terms and privacy addresses, so ClauseWatch reads them even where the page has no link to them, and in automatic mode shows its card as soon as a known sign-up page opens.
-- **Scan a link.** Paste a terms or privacy address (or any address on a known service), or paste the text itself, read on the device. When the browser closes the popup for the permission prompt, the scan finishes in the background, ready when you open the popup again.
-- **Right-click.** **ClauseWatch: check this terms link** reads a linked document; **ClauseWatch: check selected text** quotes what the rules find in the clause you selected.
-- **Automatic mode** (off until you choose it in setup or Settings, which asks for site access at that moment): a sign-up or consent form is recognised by its fields (an email field with a new password, or an "I agree" checkbox), never by what is typed, and a card shows the quotes when you start filling it in. The page is never blocked. Documents are fetched only from the page's own site or its known-site addresses, and their quotes remembered for a week, without the full text. **Don't show on this site** quiets a site (Settings → Sites); a site shown in the last week stays quiet, with a dot on the icon.
-- **Rules updates.** Once a day the extension downloads the latest signed `rules.signed.json` from this repository's GitHub releases, and uses it only if it verifies against a key built into the extension and is newer than what it has. That download is the only request ClauseWatch makes on its own.
-
-Under a report, **Ask them to delete my data** drafts a GDPR or CCPA letter on the device, suggests the privacy address the policy names, and opens it in your own email (or copies it). The popup's **Share** menu shares a plain link to the ClauseWatch page, with no tracking code, and **Copy quote & share** copies a finding with its source. In the popup, **Recently checked** notes for 30 days when a document's text changed since the check before (compared on this device).
-
-## AI help (optional)
-
-Off by default. The rules always run first; AI can then look for clauses they missed and explain them in plain words, using this browser's built-in model on the device or your own OpenAI-compatible API key, kept on the device. **Every AI finding must quote the document word for word, or it is dropped** (`src/ai/validate.ts`), and it is labelled "Found by AI (quoted)", apart from the rules' findings.
-
-**Summarise the quotes (AI)** writes up to four sentences above the report, labelled as AI. The model receives only the verified quotes, numbered, never the document; every sentence must cite a quote by number or it is cut, and a sentence that judges the service ("safe", "standard", "compliant", "nothing to worry about", a score) is refused (`src/ai/summary.ts`).
+The documentation site is built from `docs/`. Product changes are recorded in [CHANGELOG.md](CHANGELOG.md).
 
 ## Contributing
 
-Rules and known sites are the easiest place to help: both are plain JSON in `rules/`, checked by the tests. Read [CONTRIBUTING.md](CONTRIBUTING.md), then:
+Use invented policy text and example domains in tests. Every rule change needs positive and negative fixtures that agree in JavaScript and Go. Every change reaches `main` through a code-owner-reviewed pull request. Do not include private information, machine identifiers, credentials, unrelated projects or internal planning in a public contribution.
 
-```sh
-npm ci                   # installs and prepares WXT
-npm run dev              # Chrome with the extension loaded, reloading on change
-npm test                 # engine tests, including every rules fixture and the known sites
-npm run typecheck
-npm run build && npm run build:firefox && npm run size
-npm run check:manifest   # no site access asked for at install beyond the rules download
-npm run check:rules      # the known-sites schema, then every fixture in Go's engine (needs Go)
-npm run smoke            # the built extension in a real Chromium
-npm run leak-guard
-```
-
-Questions: open an issue, or write to clausewatch@guardianvigil.io. Security reports: [SECURITY.md](SECURITY.md).
-
-## Look and fonts
-
-The extension's pages share one look (`src/ui/theme.css`): the dark canvas with a faint grid, 1px hairlines, white cut-corner buttons and one blue. Geist and Geist Mono (version 1.8.1, from the `geist` package) are bundled in `public/fonts` under the SIL Open Font License (`public/fonts/OFL.txt`), so no page asks a font host for anything. The card on a web page and the report inside it use the same colours with the system font, so no font file is exposed to web pages.
+Build and validation instructions are in [development](docs/development.md). Questions: open a project issue or contact clausewatch@guardianvigil.io. Report security issues privately using [SECURITY.md](SECURITY.md).
 
 ## Licence
 
-Copyright 2026 GuardianVigil. Apache License 2.0 ([LICENSE](LICENSE), [NOTICE](NOTICE)). The names ClauseWatch and GuardianVigil and the shield mark are not covered by the licence: see [TRADEMARKS.md](TRADEMARKS.md). The bundled Geist fonts are under the SIL Open Font License.
+Copyright 2026 GuardianVigil. [Apache License 2.0](LICENSE); third-party notices are in [NOTICE](NOTICE). The bundled Geist fonts use the SIL Open Font License. ClauseWatch and GuardianVigil names and the shield mark are covered by [TRADEMARKS.md](TRADEMARKS.md), not the code licence.

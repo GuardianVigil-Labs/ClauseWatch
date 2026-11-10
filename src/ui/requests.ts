@@ -6,7 +6,10 @@ export type RequestKind = "erasure" | "access" | "offboarding";
 export type Law = "gdpr" | "ccpa";
 
 /** The legal deadline: GDPR one month (Art. 12(3)), CCPA 45 days. */
-export const RESPONSE_DAYS: Record<Law, number> = { gdpr: 30, ccpa: 45 };
+export const RESPONSE_DEADLINE: Record<Law, string> = {
+  gdpr: "Please respond without undue delay and in any event within one calendar month of receiving this request, under Article 12(3) of the GDPR. If a permitted extension is necessary because of the complexity or number of requests, please notify me within that first month and explain the reasons; the response period may be extended by up to two further months.",
+  ccpa: "Please respond within 45 days of receiving this request, subject to any extension permitted by the CCPA/CPRA. If you need an extension, please notify me within the initial response period and explain the reasons.",
+};
 
 const ARTICLE: Record<Law, Record<RequestKind, string>> = {
   gdpr: { erasure: "Article 17 of the GDPR (right to erasure)", access: "Article 15 of the GDPR (right of access)", offboarding: "Articles 17 and 20 of the GDPR" },
@@ -39,7 +42,7 @@ Under ${ARTICLE[law][kind]}, I ask you to ${ASK[kind]}.
 
 Account: ${account}
 
-Please respond within ${RESPONSE_DAYS[law]} days of receiving this request, as the law requires.
+${RESPONSE_DEADLINE[law]}
 
 Thank you.`,
   };

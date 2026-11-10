@@ -3,6 +3,8 @@
 title: ClauseWatch
 description: Quotes what a service's terms and privacy policy say, before you sign up.
 theme: jekyll-theme-primer
+plugins:
+  - jekyll-relative-links
 # Maintainer documents stay in the repository but are not published.
 exclude:
   - STORE_LISTING.md

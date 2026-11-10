@@ -3,6 +3,7 @@
 import { kv } from "../../src/storage";
 import { AUTO_ORIGINS } from "../../src/auto/background";
 import { builtInModel, type AiSettings } from "../../src/ai/assist";
+import { aiEndpoint, aiOrigin, keySettings } from "../../src/ai/settings";
 import { mutedSites, unmute } from "../../src/ui/sites";
 import { redrawRules, renderRules, rulesSaving } from "./rules";
 import { REPOSITORY_URL, SHARE_URL } from "../../src/ui/share";
@@ -16,9 +17,9 @@ const aiEl = document.getElementById("ai")!;
  * document exactly, labelled as found by AI.
  */
 async function renderAi() {
-  const current = ((await kv.get("ai")) as AiSettings | undefined) ?? { mode: "off" };
+  let current = ((await kv.get("ai")) as AiSettings | undefined) ?? { mode: "off" };
   const s = el("section");
-  s.append(el("h2", "AI help (optional)"), el("p", "The rules always run first. AI can look for clauses they missed and explain them in plain words. Every AI finding must quote the document word for word, or it is not shown. AI never rates a service.", "note"));
+  s.append(el("h2", "AI help (optional)"), el("p", "The rules always run first. AI can suggest topics using complete source sentences. Summaries select source sentences without adding generated claims. Long documents use batches of at most 24,000 characters; coverage is shown before you start. AI never rates a service.", "note"));
   const mode = el("select");
   mode.setAttribute("aria-label", "AI help");
   for (const [v, label] of [["off", "Off"], ["builtin", "This browser's built-in model (on this device)"], ["key", "My own API key (OpenAI-compatible)"]] as const) {
@@ -38,39 +39,103 @@ async function renderAi() {
   key.type = "password";
   key.placeholder = "API key (kept on this device)";
   key.setAttribute("aria-label", "API key");
+  key.autocomplete = "new-password";
+  const credential = el("select");
+  credential.setAttribute("aria-label", "Credential");
+  for (const [value, label] of [["", "Choose a credential"], ["entered", "Use the key entered below"], ["saved", "Use the saved key"]]) {
+    const option = el("option", label); option.value = value!;
+    if (value === "saved") option.disabled = current.mode !== "key";
+    credential.append(option);
+  }
+  credential.value = current.mode === "key" ? "saved" : "entered";
+  let savedEndpoint = "";
+  try { if (current.mode === "key") savedEndpoint = aiEndpoint(current.baseUrl); } catch { /* A legacy address can be corrected here. */ }
+  let selectedEndpoint = current.mode === "key" ? current.credentialEndpoint ?? savedEndpoint : "";
+  const bound = el("p", savedEndpoint ? `Saved key selected for ${savedEndpoint}.` : "Enter a key for this endpoint.", "note");
+  key.addEventListener("input", () => {
+    if (!key.value.trim()) return;
+    credential.value = "entered";
+  });
   if (current.mode === "key") {
     base.value = current.baseUrl;
     model.value = current.model;
   }
   const keyFields = el("div");
-  keyFields.append(el("label", "API address"), base, el("label", "Model"), model, el("label", "API key"), key);
+  base.addEventListener("input", () => {
+    let same = false;
+    try { same = current.mode === "key" && aiEndpoint(base.value) === aiEndpoint(current.baseUrl); } catch { /* Not yet a valid address. */ }
+    if (same) return;
+    // A key typed here is bound to the address actually saved; only the saved key needs choosing again.
+    if (key.value.trim()) {
+      credential.value = "entered";
+      bound.textContent = "The key entered below will be used for this endpoint.";
+    } else {
+      credential.value = "";
+      bound.textContent = "Endpoint changed. Enter a new key or explicitly select the saved key for this destination.";
+    }
+  });
+  credential.addEventListener("change", () => {
+    try {
+      selectedEndpoint = aiEndpoint(base.value);
+      bound.textContent = credential.value === "saved" ? `The saved key will be used for ${selectedEndpoint}.` : "The key entered below will be used for this endpoint.";
+    }
+    catch { bound.textContent = "Enter a valid API address before choosing its credential."; }
+  });
+  keyFields.append(el("label", "API address"), base, el("label", "Model"), model, el("label", "Credential"), credential, bound, el("label", "API key"), key);
   const show = () => (keyFields.hidden = mode.value !== "key");
   show();
   mode.addEventListener("change", show);
   const save = el("button", "Save");
   const msg = el("p", "", "note");
   save.addEventListener("click", async () => {
-    if (mode.value === "key") {
-      if (!URL.canParse(base.value) || new URL(base.value).protocol !== "https:" || !model.value.trim() || (!key.value && current.mode !== "key")) {
-        msg.textContent = "Enter an https address, a model and your key.";
-        return;
+    try {
+      if (mode.value === "key") {
+        // Snapshot before the permission prompt: edits during it cannot change
+        // which endpoint or credential this click saves.
+        if (credential.value === "saved" && selectedEndpoint !== aiEndpoint(base.value)) throw new Error("Choose a credential for this endpoint. The previous key will not be reused automatically.");
+        const next = keySettings(current, base.value, model.value, key.value, credential.value);
+        const origin = `${new URL(next.baseUrl).origin}/*`;
+        save.disabled = true;
+        // One request in the click: the address, and on Firefox the consent to
+        // send website content (the text being checked) to it.
+        if (!(await requestKeyAccess(origin))) {
+          msg.textContent = "ClauseWatch needs your permission to reach that address.";
+          return;
+        }
+        await kv.set("ai", next);
+        await releaseAiOrigin(current, next);
+        current = next;
+        selectedEndpoint = next.credentialEndpoint!;
+        base.value = next.baseUrl; model.value = next.model;
+        key.value = ""; credential.value = "saved";
+        credential.querySelector<HTMLOptionElement>('option[value="saved"]')!.disabled = false;
+        bound.textContent = `Saved key selected for ${next.credentialEndpoint}.`;
+      } else {
+        const next = { mode: mode.value as "off" | "builtin" };
+        await kv.set("ai", next);
+        await releaseAiOrigin(current, next);
+        current = next;
+        selectedEndpoint = "";
+        key.value = ""; credential.value = "entered";
+        credential.querySelector<HTMLOptionElement>('option[value="saved"]')!.disabled = true;
       }
-      const origin = `${new URL(base.value).origin}/*`;
-      // One request in the click: the address, and on Firefox the consent to
-      // send website content (the text being checked) to it.
-      if (!(await requestKeyAccess(origin))) {
-        msg.textContent = "ClauseWatch needs your permission to reach that address.";
-        return;
-      }
-      const apiKey = key.value || (current.mode === "key" ? current.apiKey : "");
-      await kv.set("ai", { mode: "key", baseUrl: base.value.trim(), model: model.value.trim(), apiKey } satisfies AiSettings);
-    } else {
-      await kv.set("ai", { mode: mode.value as "off" | "builtin" });
-    }
-    msg.textContent = "Saved.";
+      msg.textContent = "Saved.";
+    } catch (err) { msg.textContent = err instanceof Error ? err.message : "AI settings could not be saved."; }
+    finally { save.disabled = false; }
   });
   s.append(mode, keyFields, save, msg);
   aiEl.replaceChildren(s);
+}
+
+/**
+ * Hands the previous AI address back once settings no longer use it. The
+ * background removes it, as it does scan access: never while a scan uses it,
+ * while automatic mode holds every site, or while AI settings use it again.
+ */
+async function releaseAiOrigin(before: AiSettings, after: AiSettings): Promise<void> {
+  const old = aiOrigin(before);
+  if (!old || old === aiOrigin(after)) return;
+  await browser.runtime.sendMessage({ type: "ai:release", origin: old }).catch(() => undefined);
 }
 
 /**

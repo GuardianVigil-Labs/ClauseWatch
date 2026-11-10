@@ -1,11 +1,18 @@
-# ClauseWatch
+# ClauseWatch documentation
 
-ClauseWatch reads a service's terms of service and privacy policy on your device and quotes the sentences that matter, before you sign up. It never scores a service or calls it safe: it shows you the words. Quotes from the documents, not legal advice.
+ClauseWatch reads terms and privacy policies on your device and shows exact source quotes. It provides no service rating or legal verdict. “Not found” does not mean “safe”.
 
-- [User guide](user-guide.md): setup, reading a site, known sites, the right-click menu, the card, AI help, rules, data requests.
-- [Detection rules](rules.md): how rules work, proposing one, adding a known site, signed releases, your own rules.
-- [Privacy](PRIVACY.md): what ClauseWatch reads, what it sends and when.
-- [Architecture](architecture.md): how the extension is built: entry points, the engine, rules updates, permissions.
-- [Reader contract](reader.md): how a page becomes quotes, and the formats of the rules, known sites and signed releases.
+These pages document the current source checkout. Check [the changelog](https://github.com/GuardianVigil-Labs/ClauseWatch/blob/main/CHANGELOG.md) and published release notes before assuming an unreleased feature is available in an installed version.
 
-ClauseWatch is open source under the Apache License 2.0. The names ClauseWatch and GuardianVigil and the shield mark are not covered by the licence.
+| What you need | Documentation |
+|---|---|
+| Install from source and read a policy | [User guide](user-guide.md) |
+| Recover a failed scan, read a PDF or inspect a rendered tab | [Reading and recovery](user-guide.md#reading-and-recovery) |
+| Understand language support and custom rules | [Rules and coverage](rules.md) |
+| Understand storage, AI requests and exports | [Privacy](PRIVACY.md) |
+| Set up development and run checks | [Development](development.md) |
+| Understand modules, jobs and storage ownership | [Architecture](architecture.md) |
+| Implement compatible text extraction or matching | [Reader contract](reader.md) |
+| Prepare a reviewed release | [Releasing](releasing.md), [browser checklist](browser-checklist.md), [store listing](https://github.com/GuardianVigil-Labs/ClauseWatch/blob/main/docs/STORE_LISTING.md) |
+
+Source, licences and contribution guidance are available from the [repository README](https://github.com/GuardianVigil-Labs/ClauseWatch/blob/main/README.md). ClauseWatch is a GuardianVigil project licensed under Apache-2.0; the project names and shield mark have separate trademark terms.

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import rulesFile from "../rules/rules.json";
 import { compileRules, type RulesFile } from "../src/engine/rules";
-import { asAddress, fetchTargets, foundCount, freshPending, isOwnText, MAX_PASTED, readFetched, readFirst, recordRecent, scanAddress, scanOrigins, scanPasted, scanTargets, scanText, scanUrl, PENDING_TTL_MS } from "../src/ui/scan";
+import { asAddress, checkAgainPlan, foundCount, isOwnText, MAX_PASTED, readFetched, readFirst, recordRecent, recentHistory, scanOrigins, scanPasted, scanTargets, scanText, scanUrl, type RecentSite } from "../src/ui/scan";
 import type { KnownSite } from "../src/engine/known-sites";
 import type { DocumentResult } from "../src/engine/documents";
 
@@ -64,7 +64,7 @@ describe("Scan a link", () => {
   it("reads pasted text as whichever document it says it is, or asks", () => {
     expect(scanPasted(terms, "auto", rules).documents.map((d) => [d.kind, d.status])).toEqual([["terms", "read"]]);
     expect(scanPasted(filler, "auto", rules).documents[0]).toMatchObject({ status: "could_not_read" });
-    expect(scanPasted(terms, "privacy", rules).documents[0]).toMatchObject({ kind: "privacy", status: "could_not_read" });
+    expect(scanPasted(terms, "privacy", rules).documents[0]).toMatchObject({ kind: "privacy", status: "read", notices: [expect.stringContaining("You chose")] });
   });
 
   const known: KnownSite[] = [{ id: "service", name: "Service", domains: ["service.example"], terms: "https://legal.service.example/terms", privacy: "https://policies.other.example/service-privacy" }];
@@ -85,24 +85,17 @@ describe("Scan a link", () => {
     ]);
     // Anywhere else: only the address's own site.
     expect(scanOrigins("https://else.example/terms", "auto", known)).toEqual(["https://else.example/*"]);
-    const seen: string[] = [];
-    const r = await scanAddress("https://service.example/", "auto", rules, known, async (u) => {
-      seen.push(u);
-      return { ok: true as const, url: u, text: page(u.endsWith("terms") ? "Terms of Service" : "Privacy Policy"), contentType: "text/html" };
-    });
-    expect(seen).toEqual(["https://legal.service.example/terms", "https://policies.other.example/service-privacy"]);
-    expect(r.site).toBe("service.example");
-    expect(r.documents.map((d) => [d.kind, d.status])).toEqual([["terms", "read"], ["privacy", "read"]]);
   });
 
   it("fetches in one place and reads in another, with the same result", async () => {
     const fetcher = async (u: string) => ({ ok: true as const, url: u, text: page(u.endsWith("terms") ? "Terms of Service" : "Privacy Policy"), contentType: "text/html" });
-    const fetched = await fetchTargets("https://service.example/", "auto", known, fetcher);
-    expect(fetched.documents).toEqual([]);
-    expect(Object.keys(fetched.fetched!.pages)).toEqual(["https://legal.service.example/terms", "https://policies.other.example/service-privacy"]);
+    const targets = scanTargets("https://service.example/", "auto", known);
+    const pages = Object.fromEntries(await Promise.all(targets.map(async (t) => [t.url, await fetcher(t.url)] as const)));
+    const fetched = { site: "service.example", documents: [], fetched: { url: "https://service.example/", kind: "auto" as const, pages, targets } };
     const read = await readFetched(fetched, rules, known);
-    const direct = await scanAddress("https://service.example/", "auto", rules, known, fetcher);
-    expect(read.documents.map((d) => [d.kind, d.status])).toEqual(direct.documents.map((d) => [d.kind, d.status]));
+    const direct = (await Promise.all(targets.map((t) => scanUrl(t.url, t.kind, rules, fetcher, false)))).flatMap((r) => r.documents);
+    expect(read.documents.map((d) => [d.kind, d.status])).toEqual([["terms", "read"], ["privacy", "read"]]);
+    expect(read.documents.map((d) => [d.kind, d.status])).toEqual(direct.map((d) => [d.kind, d.status]));
     expect(read.fetched).toBeUndefined();
     // A result with nothing fetched is passed through.
     const plain = { site: "s.example", documents: [] };
@@ -112,21 +105,6 @@ describe("Scan a link", () => {
     expect(missing.documents.every((d) => d.status === "could_not_read")).toBe(true);
   });
 
-  it("keeps a pending scan only while fresh and well formed", () => {
-    const now = 1_000_000_000;
-    expect(freshPending({ url: "https://service.example/t", kind: "auto", at: now }, now)).not.toBeNull();
-    expect(freshPending({ url: "https://service.example/t", kind: "auto", at: now - PENDING_TTL_MS - 1 }, now)).toBeNull();
-    expect(freshPending({ url: "javascript:alert(1)", kind: "auto", at: now }, now)).toBeNull();
-    expect(freshPending({ url: "https://service.example/t", kind: "other", at: now }, now)).toBeNull();
-    expect(freshPending(undefined, now)).toBeNull();
-    // The sites it asked for travel with it, and only as permission patterns.
-    expect(freshPending({ url: "https://service.example/t", kind: "auto", at: now, origins: ["https://legal.service.example/*"] }, now)?.origins).toEqual(["https://legal.service.example/*"]);
-    expect(freshPending({ url: "https://service.example/t", kind: "auto", at: now, origins: ["<all_urls>"] }, now)).toBeNull();
-    expect(freshPending({ url: "https://service.example/t", kind: "auto", at: now, origins: ["https://*.service.example/*"] }, now)?.origins).toEqual(["https://*.service.example/*"]);
-    expect(freshPending({ url: "https://service.example/t", kind: "auto", at: now, origins: ["https://*/*"] }, now)).toBeNull();
-    expect(freshPending({ url: "https://service.example/t", kind: "auto", at: now, origins: ["https://a.*.example/*"] }, now)).toBeNull();
-    expect(freshPending({ url: "https://service.example/t", kind: "auto", at: now, origins: "https://a.example/*" }, now)).toBeNull();
-  });
 });
 
 describe("recently checked sites", () => {
@@ -152,6 +130,30 @@ describe("recently checked sites", () => {
     expect(list[0]!.site).toBe("s11.example");
   });
 
+  it("expires badges on display and compares only the same source identity", async () => {
+    const t = new Date("2026-01-01T00:00:00Z");
+    let list = await recordRecent([], "service.example", [read("one")], t);
+    list = await recordRecent(list, "service.example", [read("two")], t);
+    expect(recentHistory(list, t.getTime() + 30 * 864e5 - 1)[0]!.changed).toEqual(["terms"]);
+    expect(recentHistory(list, t.getTime() + 30 * 864e5)[0]!.changed).toEqual([]);
+    expect(list[0]!.changed).toEqual(["terms"]);
+    list = await recordRecent([], "service.example", [read("one")], t);
+    const other = { ...read("unrelated text"), url: "https://service.example/product-b/terms" };
+    list = await recordRecent(list, "service.example", [other], t);
+    expect(list[0]!.changed).toEqual([]);
+    list = await recordRecent(list, "service.example", [read("one")], t);
+    expect(list[0]!.changed).toEqual([]);
+    list = await recordRecent(list, "service.example", [read("two")], t);
+    expect(list[0]!.changed).toEqual(["terms"]);
+    const legacy = [{ ...list[0]!, documents: undefined, changedAt: "invalid" }];
+    expect(recentHistory(legacy, t.getTime())[0]!.changed).toEqual([]);
+  });
+
+  it("does not treat a legacy kind-only fingerprint as evidence of a revision", async () => {
+    const list = await recordRecent([{ site: "service.example", at: "", hashes: { terms: "legacy-hash" }, changed: [] } as RecentSite], "service.example", [read("new baseline")]);
+    expect(list[0]!.changed).toEqual([]);
+  });
+
   it("keeps a change noted for exactly 30 days, and never fingerprints a report without its text", async () => {
     const t0 = new Date("2026-01-01T00:00:00Z");
     let list = await recordRecent([], "s.example", [read("one")], t0);
@@ -161,7 +163,7 @@ describe("recently checked sites", () => {
     expect((await recordRecent(list, "s.example", [], new Date(t0.getTime() + 30 * day)))[0]!.changed).toEqual([]);
     // A remembered report (quotes only, empty text) changes nothing.
     const kept = await recordRecent(list, "s.example", [read("")], t0);
-    expect(kept[0]!.hashes).toEqual(list[0]!.hashes);
+    expect(kept[0]!.documents).toEqual(list[0]!.documents);
   });
 });
 
@@ -219,5 +221,27 @@ describe("reading the first link that is the document (readFirst)", () => {
       expect(await readFirst("privacy", ["https://service.example/privacy"], 3, rules, (u) => fetchChosen(u, sites))).toMatchObject({ status: "could_not_read", reason: OFF_SITE_REASON });
     }
     vi.unstubAllGlobals();
+  });
+});
+
+describe("checking a saved report again (checkAgainPlan)", () => {
+  const known: KnownSite[] = [{ id: "service", name: "Service", domains: ["service.example"], legalDomains: ["other.example"], terms: "https://legal.service.example/terms", privacy: "https://policies.other.example/service-privacy" }];
+  const readDoc = (url: string, notices: string[] = []): DocumentResult => ({ kind: "terms", status: "read", url, readAt: "", categories: [], body: "", notices });
+  const wall = `<html><body><h1>Terms of Service</h1><p>Please sign in to continue to your account and see this page.</p></body></html>`;
+
+  it("keeps the name and access-wall checks, and asks for every domain of a known site", async () => {
+    const recheck = checkAgainPlan({ site: "service.example", documents: [readDoc("https://legal.service.example/terms")] }, known)!;
+    expect(recheck.plan.explicitKind).toBe(false);
+    expect(recheck.origins).toEqual(["https://legal.service.example/*", "https://service.example/*", "https://*.service.example/*", "https://other.example/*", "https://*.other.example/*"]);
+    // A policy address that now serves an access wall is refused, not read as an empty policy.
+    const url = "https://legal.service.example/terms";
+    const result = await readFetched({ site: recheck.plan.site, documents: [], explicitKind: recheck.plan.explicitKind, fetched: { url, kind: "auto", targets: recheck.plan.targets, pages: { [url]: { ok: true, url, text: wall, contentType: "text/html" } } } }, rules, known);
+    expect(result.documents[0]).toMatchObject({ status: "could_not_read" });
+  });
+
+  it("keeps a type the person chose, and has nothing to check without an address", () => {
+    expect(checkAgainPlan({ site: "else.example", documents: [readDoc("https://else.example/t", ["You chose the document type. ClauseWatch has not verified that this text is the complete policy."])] }, known)!.plan.explicitKind).toBe(true);
+    expect(checkAgainPlan({ site: "else.example", documents: [readDoc("https://else.example/t")] }, known)!.origins).toEqual(["https://else.example/*"]);
+    expect(checkAgainPlan({ site: "Pasted text", documents: [{ kind: "terms", status: "could_not_read", reason: "x" }] }, known)).toBeNull();
   });
 });
