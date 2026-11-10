@@ -47,14 +47,23 @@ const TOO_LARGE_REASON = "The page is too large to read.";
 /**
  * A PDF is kept as base64 (4/3 of its size) in a scan job, whose session
  * storage holds at most 2 MiB of text (MAX_SESSION_CHARS in src/scan/jobs.ts).
- * At most 1.125 MiB keeps one PDF within three quarters of that, room left for
- * the job itself and its other document, so a PDF that downloads can be kept.
+ * No PDF is larger than this; each download is also held to the room its scan
+ * job has left (`room`), so a document that downloads can always be kept.
  */
 export const MAX_PDF_BYTES = 1152 * 1024;
 export const PDF_TOO_LARGE_REASON = "The PDF is too large to read here (over 1.1 MB). Open it and paste the policy text.";
+export const NO_ROOM_REASON = "This scan has no room left for this document. Scan its address on its own.";
 
-/** A deadline covers headers and the streamed body, including a stalled stream. */
-export async function fetchText(url: string, staysOn?: (nextUrl: string) => boolean, signal?: AbortSignal): Promise<Fetched> {
+/**
+ * A deadline covers headers and the streamed body, including a stalled stream.
+ * `room`: how many characters the result may take where it is kept; a larger
+ * download is refused as soon as its size is known.
+ */
+export async function fetchText(url: string, staysOn?: (nextUrl: string) => boolean, signal?: AbortSignal, room = Infinity): Promise<Fetched> {
+  // A web page decodes to at most one character per byte; a PDF is kept as base64.
+  const pageBytes = Math.min(MAX_BYTES, room);
+  const pdfBytes = Math.min(MAX_PDF_BYTES, Math.floor(room / 4) * 3);
+  const tooLarge = (pdf: boolean, size: number): Fetched => ({ ok: false, reason: size <= (pdf ? MAX_PDF_BYTES : MAX_BYTES) ? NO_ROOM_REASON : pdf ? PDF_TOO_LARGE_REASON : TOO_LARGE_REASON });
   const controller = new AbortController();
   const cancel = () => controller.abort(signal?.reason);
   if (signal?.aborted) cancel();
@@ -84,7 +93,7 @@ export async function fetchText(url: string, staysOn?: (nextUrl: string) => bool
     if (Number.isFinite(declared) && declared > MAX_BYTES) return { ok: false, reason: TOO_LARGE_REASON };
     const pdfChunks: Uint8Array[] = [];
     let isPdf = response.headers.get("content-type")?.toLowerCase().includes("application/pdf") ?? false;
-    if (isPdf && Number.isFinite(declared) && declared > MAX_PDF_BYTES) return { ok: false, reason: PDF_TOO_LARGE_REASON };
+    if (Number.isFinite(declared) && declared > (isPdf ? pdfBytes : pageBytes)) return tooLarge(isPdf, declared);
     const decoder = new TextDecoder();
     const chunks: string[] = [];
     let bytes = 0;
@@ -96,7 +105,7 @@ export async function fetchText(url: string, staysOn?: (nextUrl: string) => bool
         bytes += part.value.byteLength;
         if (bytes > MAX_BYTES) return { ok: false, reason: TOO_LARGE_REASON };
         if (bytes === part.value.byteLength && new TextDecoder().decode(part.value.subarray(0, 5)) === "%PDF-") isPdf = true;
-        if (isPdf && bytes > MAX_PDF_BYTES) return { ok: false, reason: PDF_TOO_LARGE_REASON };
+        if (bytes > (isPdf ? pdfBytes : pageBytes)) return tooLarge(isPdf, bytes);
         pdfChunks.push(part.value);
         if (!isPdf) chunks.push(decoder.decode(part.value, { stream: true }));
       }
@@ -105,7 +114,7 @@ export async function fetchText(url: string, staysOn?: (nextUrl: string) => bool
       let signature = "";
       for (const chunk of pdfChunks) { signature += String.fromCharCode(...chunk.subarray(0, 5 - signature.length)); if (signature.length === 5) break; }
       isPdf = signature === "%PDF-";
-      if (isPdf && bytes > MAX_PDF_BYTES) return { ok: false, reason: PDF_TOO_LARGE_REASON };
+      if (bytes > (isPdf ? pdfBytes : pageBytes)) return tooLarge(isPdf, bytes);
     }
     if (isPdf) {
       const binary: string[] = [];
@@ -134,9 +143,9 @@ export const LOCAL_REASON = "ClauseWatch does not read local or private network 
  * ends on another site is not used. Redirects between a known site's own
  * domains and legal domains are followed.
  */
-export function fetchChosen(url: string, sites: KnownSite[] = [], signal?: AbortSignal): Promise<Fetched> {
+export function fetchChosen(url: string, sites: KnownSite[] = [], signal?: AbortSignal, room?: number): Promise<Fetched> {
   if (!mayFetch(url, url)) return Promise.resolve({ ok: false, reason: LOCAL_REASON });
-  return fetchText(url, (end) => mayFetch(end, url) || withinKnownSite(end, url, sites), signal);
+  return fetchText(url, (end) => mayFetch(end, url) || withinKnownSite(end, url, sites), signal, room);
 }
 
 /**

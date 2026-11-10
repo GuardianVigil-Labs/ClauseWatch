@@ -96,7 +96,7 @@ const scans = new ScanJobs({
   release: async (origins) => {
     if (!(await browser.permissions.contains({ origins: AUTO_ORIGINS }))) await browser.permissions.remove({ origins });
   },
-  fetch: (url, sites, signal) => fetchChosen(url, sites, signal),
+  fetch: (url, sites, signal, room) => fetchChosen(url, sites, signal, room),
   completed: (job) => openResult(job.id),
 });
 let ready: Promise<void> = Promise.resolve();

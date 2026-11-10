@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { JOB_TTL_MS, MAX_JOBS, MAX_SESSION_CHARS, ScanJobs, activeJob, newJob, type JobStore, type ScanJob, type ScanPlan } from "../src/scan/jobs";
 import type { KnownSite } from "../src/engine/known-sites";
-import { MAX_PDF_BYTES, type Fetched } from "../src/auto/background";
+import { fetchText, MAX_PDF_BYTES, NO_ROOM_REASON, type Fetched } from "../src/auto/background";
 import { readFetched, scanTargets } from "../src/ui/scan";
 import { compileRules, type RulesFile } from "../src/engine/rules";
 import rulesFile from "../rules/rules.json";
@@ -17,7 +17,7 @@ function setup() {
     put: async (job) => { records.set(job.id, structuredClone(job)); },
     remove: async (id) => { records.delete(id); },
   };
-  const fetch = vi.fn(async (url: string, _sites: KnownSite[], _signal: AbortSignal): Promise<Fetched> => ({ ok: true, url, text: "document", contentType: "text/html" }));
+  const fetch = vi.fn(async (url: string, _sites: KnownSite[], _signal: AbortSignal, _room: number): Promise<Fetched> => ({ ok: true, url, text: "document", contentType: "text/html" }));
   const allowed = vi.fn(async (_origins: string[]) => true);
   const release = vi.fn(async () => {});
   const completed = vi.fn(async () => {});
@@ -54,6 +54,59 @@ describe("independent background scans", () => {
     await x.store.put(job); await x.runner.wake();
     expect(x.records.get(job.id)?.state).toBe("complete");
     expect(JSON.stringify(x.records.get(job.id)).length).toBeLessThanOrEqual(MAX_SESSION_CHARS);
+  });
+
+  // Real downloads: each PDF is served as bytes and kept as base64 by fetchText.
+  const servePdfs = (size: (url: string) => number) => vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const body = new Uint8Array(size(url)).fill(32);
+    body.set(new TextEncoder().encode("%PDF-"));
+    return new Response(body, { headers: { "content-type": "application/pdf" } });
+  }));
+  const realFetch = (rooms: number[] = []) => async (url: string, _sites: KnownSite[], signal: AbortSignal, room: number) => { rooms.push(room); return fetchText(url, () => true, signal, room); };
+
+  it("keeps a terms and privacy scan of two PDFs: the second gets only the room left, refused clearly when larger", async () => {
+    const x = setup();
+    servePdfs(() => MAX_PDF_BYTES);
+    const rooms: number[] = [];
+    x.fetch.mockImplementation(realFetch(rooms));
+    const job = newJob(plan(), [origin], [], "scan", 1000);
+    await x.store.put(job); await x.runner.wake();
+    vi.unstubAllGlobals();
+    const kept = x.records.get(job.id)!;
+    expect(kept.state).toBe("complete");
+    expect(JSON.stringify(kept).length).toBeLessThanOrEqual(MAX_SESSION_CHARS);
+    expect(kept.result?.fetched?.pages["https://service.example/terms"]).toMatchObject({ ok: true, contentType: "application/pdf" });
+    expect(kept.result?.fetched?.pages["https://service.example/privacy"]).toEqual({ ok: false, reason: NO_ROOM_REASON });
+    expect(rooms[1]).toBeLessThan(rooms[0]! - Math.ceil(MAX_PDF_BYTES / 3) * 4);
+  });
+
+  it("keeps a second PDF exactly as large as the room left, and refuses one byte more", async () => {
+    for (const extra of [0, 1]) {
+      const x = setup();
+      const rooms: number[] = [];
+      servePdfs((url) => (url.endsWith("terms") ? MAX_PDF_BYTES : Math.floor(rooms[1]! / 4) * 3 + extra));
+      x.fetch.mockImplementation(realFetch(rooms));
+      const job = newJob(plan(), [origin], [], "scan", 1000);
+      await x.store.put(job); await x.runner.wake();
+      vi.unstubAllGlobals();
+      const kept = x.records.get(job.id)!;
+      expect(kept.state).toBe("complete");
+      expect(JSON.stringify(kept).length).toBeLessThanOrEqual(MAX_SESSION_CHARS);
+      expect(kept.result?.fetched?.pages["https://service.example/privacy"]?.ok).toBe(extra === 0);
+    }
+  });
+
+  it("refuses a page that grows past the job's room when kept, instead of failing the scan", async () => {
+    const x = setup();
+    // Quotes are escaped when kept: the page takes twice its downloaded size.
+    x.fetch.mockImplementation(async (url, _sites, _signal, room) => ({ ok: true, url, text: '"'.repeat(Math.floor(room * 0.6)), contentType: "text/html" }));
+    const job = newJob(plan(), [origin], [], "scan", 1000);
+    await x.store.put(job); await x.runner.wake();
+    const kept = x.records.get(job.id)!;
+    expect(kept.state).toBe("complete");
+    expect(JSON.stringify(kept).length).toBeLessThanOrEqual(MAX_SESSION_CHARS);
+    expect(kept.result?.fetched?.pages["https://service.example/terms"]).toEqual({ ok: false, reason: NO_ROOM_REASON });
+    expect(kept.result?.fetched?.pages["https://service.example/privacy"]).toEqual({ ok: false, reason: NO_ROOM_REASON });
   });
 
   it("never releases origins held before the scan", async () => {

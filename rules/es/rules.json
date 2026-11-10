@@ -15,7 +15,7 @@
         "(vendemos|podemos vender) (sus |tus )?datos personales"
       ],
       "none": [
-        "\\b(no|nunca|jam[aá]s)\\s+(les\\s+|le\\s+)?(vendemos|venderemos|podemos\\s+vender)\\b"
+        "\\b(no|nunca|jam[aá]s|tampoco|ni)\\s+(se\\s+)?(les\\s+|le\\s+|los\\s+|las\\s+)?(vendemos|venderemos|vender[ií]amos|podemos\\s+vender|podremos\\s+vender|podr[ií]amos\\s+vender)\\b"
       ]
     },
     {
@@ -26,7 +26,7 @@
         "(renueva|renovar[aá]).{0,100}autom[aá]ticamente"
       ],
       "none": [
-        "\\b(no|nunca|jam[aá]s)\\s+(se\\s+|la\\s+|lo\\s+)?(renueva|renovar)"
+        "\\b(no|nunca|jam[aá]s|tampoco|ni)\\s+(se\\s+)?(la\\s+|lo\\s+|le\\s+)?(renueva|renovar|renovamos)"
       ]
     },
     {
@@ -36,7 +36,8 @@
         "(disputas|controversias).{0,100}(arbitraje vinculante|arbitraje obligatorio)"
       ],
       "none": [
-        "\\b(no|nunca)\\s+(se\\s+)?(requieren?|exigen?|est[aá]n\\s+sujetas?|estar[aá]n\\s+sujetas?|ser[aá]n\\s+sometidas?|someter[aá]n|resolver[aá]n)\\s+(a\\s+|mediante\\s+|por\\s+)?(un\\s+)?arbitraje\\s+(vinculante|obligatorio)"
+        "\\b(no|nunca|jam[aá]s|tampoco|ni)\\s+(se\\s+)?(requieren?|requerir[aá]n?|exigen?|exigir[aá]n?|est[aá]n?\\s+sujetas?|estar[aá]n?\\s+sujetas?|ser[aá]n?\\s+sometidas?|ser[aá]n?\\s+resueltas?|someten|someter[aá]n?|resuelven|resolver[aá]n?)\\s+(a\\s+|al\\s+|mediante\\s+|por\\s+)?(un\\s+|el\\s+)?arbitraje\\s+(vinculante|obligatorio)",
+        "\\bninguna?\\s+(de\\s+las\\s+|de\\s+los\\s+)?(disputas?|controversias?)\\b"
       ]
     }
   ]

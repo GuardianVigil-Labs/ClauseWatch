@@ -15,7 +15,7 @@
         "nous (pouvons vendre|vendons) vos donn[eé]es personnelles"
       ],
       "none": [
-        "\\bnous\\s+ne\\s+(les\\s+)?(vendons|vendrons|pouvons)\\b"
+        "\\bnous\\s+n(e\\s+|['’]\\s*)(les\\s+|leur\\s+|en\\s+|y\\s+)?(vendons|vendrons|vendrions|pouvons|pourrons|pourrions)\\b"
       ]
     },
     {
@@ -26,7 +26,8 @@
         "(renouvel[eé]|renouvellera).{0,100}automatiquement"
       ],
       "none": [
-        "\\bne\\s+(sera|seront|se|le|la)\\s+(pas|jamais|plus)\\s+renouvel|\\bne\\s+(se\\s+)?renouvel\\w*\\s+(pas|jamais|plus)\\b|\\bn['’](est|sera)\\s+(pas|jamais|plus)\\s+renouvel"
+        "\\bn(e\\s+|['’]\\s*)(se\\s+|s['’]\\s*|le\\s+|la\\s+|les\\s+)?(sera|seront|serait|seraient|est|sont|peut|peuvent|pourra|pourront)\\s+(pas|jamais|plus|point|nullement|aucunement|gu[eè]re|en\\s+aucun\\s+cas)\\s+([eê]tre\\s+)?(automatiquement\\s+)?renouvel",
+        "\\bn(e\\s+|['’]\\s*)(se\\s+|s['’]|le\\s+|la\\s+|l['’]|les\\s+|nous\\s+|vous\\s+)?renouvel\\w*\\s+(pas|jamais|plus|point|nullement|aucunement|gu[eè]re|en\\s+aucun\\s+cas)\\b"
       ]
     },
     {
@@ -36,7 +37,8 @@
         "(litiges|diff[eé]rends).{0,100}(arbitrage obligatoire|arbitrage contraignant)"
       ],
       "none": [
-        "\\bne\\s+(n[eé]cessitent|n[eé]cessite|seront|sont|sera|est)\\s+(pas|jamais|plus)\\b[^.,;]{0,30}\\barbitrage"
+        "\\bn(e\\s+|['’]\\s*)(y\\s+|en\\s+)?(n[eé]cessit\\w*|exig\\w*|impos\\w*|requi[eè]r\\w*|pr[eé]voi\\w*|entra[iî]n\\w*|sera|seront|serait|seraient|est|sont)\\s+(pas|jamais|plus|point|nullement|aucunement|gu[eè]re|en\\s+aucun\\s+cas|aucun|aucune)\\b[^.,;]{0,30}\\barbitrage",
+        "\\baucun\\w*\\s+(des\\s+)?(litiges?|diff[eé]rends?)\\s+ne\\b"
       ]
     }
   ]

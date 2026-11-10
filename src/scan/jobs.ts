@@ -1,6 +1,6 @@
 // Recoverable scan jobs. Requests, checkpoints and results are separate per id;
 // a popup is only a viewer, never the owner of a document download.
-import type { Fetched } from "../auto/background";
+import { NO_ROOM_REASON, type Fetched } from "../auto/background";
 import type { DocumentResult, Kind } from "../engine/documents";
 import type { KnownSite } from "../engine/known-sites";
 import type { ScanResult } from "../ui/scan";
@@ -11,6 +11,8 @@ export const JOB_TTL_MS = 10 * 60 * 1000;
 export const MAX_JOBS = 8;
 export const MAX_SESSION_CHARS = 2 * 1024 * 1024;
 const MAX_RECOVERIES = 3;
+/** Room for a page entry's own fields: its status, content type and reason. */
+const PAGE_OVERHEAD = 1024;
 export interface ScanPlan {
   site: string;
   url: string;
@@ -50,6 +52,13 @@ function clearPayload(job: ScanJob): void {
   job.plan.documents = [];
   delete job.result;
 }
+/** The job as it is kept once complete: its pages move into the result. */
+function completed(job: ScanJob): ScanJob {
+  const { plan, pages } = job;
+  return { ...job, state: "complete", pages: {}, result: { site: plan.site, documents: plan.documents, groups: plan.groups, explicitKind: plan.explicitKind, fetched: { url: plan.url, kind: plan.kind, targets: plan.targets, pages } } };
+}
+/** Characters the completed job takes; it must stay within MAX_SESSION_CHARS. */
+const keptSize = (job: ScanJob) => JSON.stringify(completed(job)).length;
 export function newJob(plan: ScanPlan, origins: string[], addedOrigins: string[], source: ScanJob["source"], now = Date.now()): ScanJob {
   return { id: crypto.randomUUID(), at: now, updated: now, source, state: "waiting", plan, origins, addedOrigins, pages: {}, recoveries: 0 };
 }
@@ -58,7 +67,8 @@ interface JobIO {
   store: JobStore;
   allowed(origins: string[]): Promise<boolean>;
   release(origins: string[]): Promise<void>;
-  fetch(url: string, sites: KnownSite[], signal: AbortSignal): Promise<Fetched>;
+  /** `room`: characters the page may take in the job. */
+  fetch(url: string, sites: KnownSite[], signal: AbortSignal, room: number): Promise<Fetched>;
   completed?(job: ScanJob): Promise<void>;
   now?: () => number;
 }
@@ -159,22 +169,25 @@ export class ScanJobs {
       for (const url of urls) {
         if (controller.signal.aborted) break;
         if (!job.pages[url]?.ok) {
-          try { job.pages[url] = await this.io.fetch(url, job.plan.sites, controller.signal); }
+          // Each download gets the room the job has left, less what its entry and a redirected address add.
+          delete job.pages[url];
+          const room = MAX_SESSION_CHARS - keptSize(job) - 2 * url.length - PAGE_OVERHEAD;
+          try { job.pages[url] = room > 0 ? await this.io.fetch(url, job.plan.sites, controller.signal, room) : { ok: false, reason: NO_ROOM_REASON }; }
           catch { job.pages[url] = { ok: false, reason: "The page could not be reached. Try again." }; }
+          // Escaped characters can still make a page larger kept than downloaded.
+          if (keptSize(job) > MAX_SESSION_CHARS) job.pages[url] = { ok: false, reason: NO_ROOM_REASON };
         }
         if (this.now() - job.at >= JOB_TTL_MS) { expired = true; controller.abort(); }
         // Save completed downloads before moving on. Recovery reuses these pages.
         if (controller.signal.aborted) break;
         job.updated = this.now();
-        if (JSON.stringify(job).length > MAX_SESSION_CHARS) throw new Error("The scan is too large to keep. Open a policy in a tab and use This site.");
+        if (keptSize(job) > MAX_SESSION_CHARS) throw new Error("The scan is too large to keep. Open a policy in a tab and use This site.");
         await this.makeRoom(job);
         await this.io.store.put(job);
       }
       if (controller.signal.aborted || (await this.io.store.get(job.id))?.state === "cancelled") return;
-      job.state = "complete";
       // Keep pages once, inside the result, rather than duplicating large strings in storage.
-      job.result = { site: job.plan.site, documents: job.plan.documents, groups: job.plan.groups, explicitKind: job.plan.explicitKind, fetched: { url: job.plan.url, kind: job.plan.kind, targets: job.plan.targets, pages: job.pages } };
-      job.pages = {};
+      Object.assign(job, completed(job));
       job.updated = this.now();
       await this.makeRoom(job);
       await this.io.store.put(job);

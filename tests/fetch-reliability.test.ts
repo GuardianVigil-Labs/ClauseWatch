@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CANCELLED_REASON, FETCH_TIMEOUT_MS, fetchChosen, fetchText, MAX_BYTES, MAX_PDF_BYTES, OFF_SITE_REASON, PDF_TOO_LARGE_REASON, TIMEOUT_REASON } from "../src/auto/background";
+import { CANCELLED_REASON, FETCH_TIMEOUT_MS, fetchChosen, fetchText, MAX_BYTES, MAX_PDF_BYTES, NO_ROOM_REASON, OFF_SITE_REASON, PDF_TOO_LARGE_REASON, TIMEOUT_REASON } from "../src/auto/background";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 const url = "https://service.example/terms";
@@ -61,6 +61,23 @@ describe("bounded document downloads", () => {
     expect(await fetchText(url)).toEqual({ ok: false, reason: PDF_TOO_LARGE_REASON });
     pdf(MAX_PDF_BYTES);
     expect(await fetchText(url)).toMatchObject({ ok: true, contentType: "application/pdf" });
+  });
+
+  it("holds a download to the room it has, refusing up front by its declared size", async () => {
+    const serve = (body: Uint8Array<ArrayBuffer>, headers: HeadersInit = {}) => vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(body, { headers })));
+    const pdf = (size: number) => { const b = new Uint8Array(size).fill(32); b.set(new TextEncoder().encode("%PDF-")); return b; };
+    serve(pdf(300));
+    expect(await fetchText(url, undefined, undefined, 400)).toMatchObject({ ok: true, pdf: expect.any(String) });
+    serve(pdf(301));
+    expect(await fetchText(url, undefined, undefined, 400)).toEqual({ ok: false, reason: NO_ROOM_REASON });
+    serve(pdf(10), { "content-type": "application/pdf", "content-length": "301" });
+    expect(await fetchText(url, undefined, undefined, 400)).toEqual({ ok: false, reason: NO_ROOM_REASON });
+    serve(pdf(10), { "content-type": "application/pdf", "content-length": String(MAX_PDF_BYTES + 1) });
+    expect(await fetchText(url, undefined, undefined, 400)).toEqual({ ok: false, reason: PDF_TOO_LARGE_REASON });
+    serve(new Uint8Array(401).fill(97), { "content-type": "text/html" });
+    expect(await fetchText(url, undefined, undefined, 400)).toEqual({ ok: false, reason: NO_ROOM_REASON });
+    serve(new Uint8Array(400).fill(97), { "content-type": "text/html" });
+    expect(await fetchText(url, undefined, undefined, 400)).toMatchObject({ ok: true, text: "a".repeat(400) });
   });
 
   it("decodes UTF-8 split across chunks and accepts an empty body", async () => {
