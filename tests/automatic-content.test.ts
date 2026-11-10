@@ -195,4 +195,14 @@ describe("automatic mode's cost on a page", () => {
     expect(report()?.site).not.toBe("embedded.example");
     expect(document.querySelectorAll("[popover]")).toHaveLength(1);
   });
+
+  it("in the top frame, finishes a same-host frame's loading card with that frame's report", async () => {
+    await boot("<p>Welcome</p>");
+    const site = location.hostname.replace(/^www\./, "");
+    const show = (documents: DocumentResult[] | null) => message({ type: "auto:show", site, documents } as { type: string }, { id: "extension" });
+    show(null);
+    show([success("terms"), success("privacy")]);
+    expect(report()?.documents.map((d) => d.kind)).toEqual(["terms", "privacy"]);
+    expect(document.querySelectorAll("[popover]")).toHaveLength(1);
+  });
 });

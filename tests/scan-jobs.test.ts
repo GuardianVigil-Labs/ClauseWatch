@@ -229,6 +229,36 @@ describe("temporary access release", () => {
     expect(x.records.get(prompt.id)?.state).toBe("waiting");
   });
 
+  it("ends, rather than strands, a scan submitted while its access was being removed", async () => {
+    const x = setup();
+    let granted = true;
+    x.allowed.mockImplementation(async () => granted);
+    await x.store.put(finished([origin], [origin]));
+    let late!: ScanJob;
+    // The new request finds the access still there, then the removal completes.
+    x.release.mockImplementationOnce(async () => {
+      late = newJob(plan(), [origin], [origin], "menu", 1002);
+      await x.store.put(late);
+      granted = false;
+    });
+    await x.runner.wake();
+    expect(x.records.get(late.id)?.state).toBe("failed");
+    expect(x.records.get(late.id)?.reason).toMatch(/Scan again/);
+    expect(x.completed).toHaveBeenCalledOnce();
+    expect(x.fetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps a scan submitted during removal waiting when its access is there after removal", async () => {
+    const x = setup();
+    await x.store.put(finished([origin], [origin]));
+    let late!: ScanJob;
+    x.release.mockImplementationOnce(async () => { late = newJob(plan(), [origin], [origin], "scan", 1002); await x.store.put(late); });
+    await x.runner.wake();
+    expect(x.records.get(late.id)?.state).toBe("waiting");
+    await x.runner.wake();
+    expect(x.records.get(late.id)?.state).toBe("complete");
+  });
+
   it("after a worker restart, keeps access for the recovered job and removes the rest; a failed removal is retried", async () => {
     const x = setup();
     const done = finished([other], [other]);

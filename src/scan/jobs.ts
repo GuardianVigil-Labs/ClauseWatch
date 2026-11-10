@@ -220,6 +220,25 @@ export class ScanJobs {
       try { await this.io.release(origins); } catch { return; }
     }
     for (const job of done) { if (this.now() - job.at >= JOB_TTL_MS) clearPayload(job); job.released = true; await this.io.store.put(job); }
+    if (origins.length) await this.failRaced(origins, new Set(jobs.map((j) => j.id)));
+  }
+
+  /**
+   * A scan saved while access was being removed may have been granted the
+   * access just before it went (its request found it still there). Access can
+   * only be asked for again from a click, so such a scan ends with a reason
+   * and its Scan again button, rather than waiting until it expires.
+   */
+  private async failRaced(removed: string[], seen: Set<string>): Promise<void> {
+    for (const job of await this.io.store.list()) {
+      if (seen.has(job.id) || job.state !== "waiting" || !job.origins.some((o) => removed.includes(o))) continue;
+      if (await this.io.allowed(job.origins)) continue;
+      job.state = "failed";
+      job.reason = "Access to this site changed while the scan was starting. Select Scan again.";
+      job.updated = this.now();
+      await this.io.store.put(job);
+      if (job.source === "menu") await this.io.completed?.(job);
+    }
   }
 
   private async prune(): Promise<void> {

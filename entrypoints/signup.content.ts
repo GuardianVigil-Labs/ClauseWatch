@@ -39,7 +39,9 @@ export default defineContentScript({
     // Put together only when a page's documents are read, never on pages that read nothing.
     const ruleSet = () => (rulesP ??= fileP.then((f) => loadRules(kv, compileRules(f))));
     const site = siteOf(location.href);
-    let card: { host: HTMLElement; body: HTMLElement; label: HTMLElement; site: string; dispose: () => void } | null = null;
+    // owner: whose report the card holds, this page's own or a frame's. Never inferred
+    // from the site: a same-host frame reports the same site as this page.
+    let card: { host: HTMLElement; body: HTMLElement; label: HTMLElement; site: string; owner: "page" | "frame"; dispose: () => void } | null = null;
     let docs: DocumentResult[] = [];
     let started: Promise<void> | null = null;
     let active = false;
@@ -117,9 +119,10 @@ export default defineContentScript({
     }
 
     /** The tab's one card, labelled with the site whose documents it shows. */
-    function showCard(forSite = site): NonNullable<typeof card> {
+    function showCard(forSite = site, owner: "page" | "frame" = "page"): NonNullable<typeof card> {
       if (card) {
         card.site = forSite;
+        card.owner = owner;
         card.label.textContent = ` · ${forSite}`;
         return card;
       }
@@ -195,7 +198,7 @@ export default defineContentScript({
       guard.observe(document.documentElement, { childList: true });
       guard.observe(host, { attributes: true, attributeFilter: ["style", "popover", "hidden", "class", "inert"] });
       guard.observe(document, { childList: true }); // the root itself replaced
-      card = { host, body, label: where, site: forSite, dispose: () => { guard.disconnect(); clearInterval(keep); } };
+      card = { host, body, label: where, site: forSite, owner, dispose: () => { guard.disconnect(); clearInterval(keep); } };
       return card;
     }
 
@@ -248,10 +251,10 @@ export default defineContentScript({
      * The card's content: the quotes, and the way to quiet this site. In a
      * frame, the documents go to the top frame's card instead.
      */
-    function render(forSite = site, documents = docs) {
+    function render(forSite = site, documents = docs, owner: "page" | "frame" = "page") {
       if (!active || dismissed) return;
       if (!isTop) { void send({ type: "auto:card", documents }).catch(() => undefined); return; }
-      const c = showCard(forSite);
+      const c = showCard(forSite, owner);
       // A plain element with a closed shadow root: content scripts have no custom elements.
       const report = document.createElement("div");
       fillReport(report.attachShadow({ mode: "closed" }), { site: forSite, documents, siteCard: false });
@@ -272,14 +275,14 @@ export default defineContentScript({
       const retry = button("Try again");
       retry.addEventListener("click", (e) => { if (e.isTrusted) void start(); });
       // A frame's reading is retried from the frame, by focusing its form again.
-      c.body.replaceChildren(...(documents.length ? [report] : []), ...(forSite === site && !completeDocs(documents) ? [retry] : []), disclaimer, quiet);
+      c.body.replaceChildren(...(documents.length ? [report] : []), ...(owner === "page" && !completeDocs(documents) ? [retry] : []), disclaimer, quiet);
     }
 
     /** A frame's report, shown in this (top) frame's card unless this page's own card is up. */
     function showFrame(frameSite: string, documents: DocumentResult[] | null) {
-      if (!active || dismissed || started || (card && card.site === site)) return;
-      if (documents) render(frameSite, documents);
-      else showCard(frameSite).body.textContent = "Reading this site's terms…";
+      if (!active || dismissed || started || card?.owner === "page") return;
+      if (documents) render(frameSite, documents, "frame");
+      else showCard(frameSite, "frame").body.textContent = "Reading this site's terms…";
     }
 
     function button(text: string, primary = false): HTMLButtonElement {
