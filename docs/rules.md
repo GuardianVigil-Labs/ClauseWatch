@@ -78,6 +78,6 @@ The report retains later matching sentences and offers **Show surrounding text**
 | Spanish | `rules/es/rules.json`, version 1 | Data sale, automatic renewal, arbitration |
 | French | `rules/fr/rules.json`, version 1 | Data sale, automatic renewal, arbitration |
 
-The language selector uses the applicable bundled pack for Spanish/French reads. English rule switches and user rules are not applied to those reads. An imported custom rule is not a way to enable checks for an otherwise unsupported language. Coverage notices must not imply that all English topics were checked. These packs detect selected formulations, not every possible sentence or legal dependency.
+The language selector uses the applicable bundled pack for Spanish/French reads. When the text itself is confidently identified, English rule switches and user rules are not applied to those reads; when the language is only a guess, the English rules run alongside the pack. An imported custom rule is not a way to enable checks for an otherwise unsupported language. Coverage notices must not imply that all English topics were checked. These packs detect selected formulations, not every possible sentence or legal dependency.
 
 To change a pack, edit its own rule and fixture files, add invented positive and near-negative sentences, and run `npm test` and `npm run check:rules`. Every pack is checked by JavaScript and Go. Spanish/French pack changes ship with the extension; they are not independent downloaded signed releases. Review and release requirements are in [releasing](releasing.md).

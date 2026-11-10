@@ -35,15 +35,6 @@ function visible(el: HTMLElement): boolean {
   return true;
 }
 
-/** Open roots only; closed roots belong to the page and cannot be inspected. */
-export function signupRoots(doc: Document): (Document | ShadowRoot)[] {
-  const roots: (Document | ShadowRoot)[] = [doc];
-  for (let i = 0; i < roots.length; i++) {
-    for (const el of roots[i]!.querySelectorAll("*")) if (el.shadowRoot) roots.push(el.shadowRoot);
-  }
-  return roots;
-}
-
 /** The smallest ancestor holding both elements. */
 function commonRoot(a: HTMLElement, b: HTMLElement): HTMLElement {
   let n: HTMLElement | null = a;

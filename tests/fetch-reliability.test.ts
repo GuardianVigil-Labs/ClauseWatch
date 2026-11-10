@@ -1,9 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BLOCKED_REASON, CANCELLED_REASON, FETCH_TIMEOUT_MS, fetchChosen, fetchText, MAX_BYTES, OFF_SITE_REASON, TIMEOUT_REASON } from "../src/auto/background";
+import { CANCELLED_REASON, FETCH_TIMEOUT_MS, fetchChosen, fetchText, MAX_BYTES, OFF_SITE_REASON, TIMEOUT_REASON } from "../src/auto/background";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 const url = "https://service.example/terms";
-const redirect = (location: string) => new Response(null, { status: 302, headers: { location } });
 
 describe("bounded document downloads", () => {
   it("turns a dropped body stream into a document error", async () => {
@@ -76,34 +75,39 @@ describe("bounded PDF transport", () => {
   });
 });
 
-describe("redirects checked before the next request", () => {
-  it("never contacts off-site or private redirect destinations", async () => {
-    for (const target of ["https://other.example/privacy", "http://192.0.2.10/admin", "file:///etc/passwd"]) {
-      const fetcher = vi.fn().mockResolvedValue(redirect(target));
-      vi.stubGlobal("fetch", fetcher);
-      expect(await fetchChosen(url)).toEqual({ ok: false, reason: OFF_SITE_REASON });
-      expect(fetcher).toHaveBeenCalledTimes(1);
-    }
+describe("redirects followed by the browser, final address checked", () => {
+  // What a browser hands back after following redirects: the final answer, its
+  // address and `redirected`. A manual redirect's Location is never visible.
+  const followed = (finalUrl: string, body = "terms") => {
+    const res = new Response(body);
+    Object.defineProperty(res, "url", { value: finalUrl });
+    Object.defineProperty(res, "redirected", { value: finalUrl !== url });
+    return res;
+  };
+
+  it("asks the browser to follow redirects, without cookies", async () => {
+    const fetcher = vi.fn().mockResolvedValue(followed(url));
+    vi.stubGlobal("fetch", fetcher);
+    await fetchChosen(url);
+    expect(fetcher).toHaveBeenCalledExactlyOnceWith(url, { credentials: "omit", redirect: "follow", signal: expect.any(AbortSignal) });
   });
 
-  it("follows visible relative and known-site redirects after checking them", async () => {
-    const fetcher = vi.fn().mockResolvedValueOnce(redirect("/legal/terms")).mockResolvedValueOnce(new Response("terms"));
-    vi.stubGlobal("fetch", fetcher);
+  it("reads a redirect that ended on the same site or the known site's legal domain", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(followed("https://service.example/legal/terms")));
     expect(await fetchChosen(url)).toMatchObject({ ok: true, url: "https://service.example/legal/terms", text: "terms" });
-    expect(fetcher.mock.calls.map((c) => c[0])).toEqual([url, "https://service.example/legal/terms"]);
     const sites = [{ id: "service", name: "Service", domains: ["service.example"], legalDomains: ["parent.example"], terms: url, privacy: "https://parent.example/privacy" }];
-    fetcher.mockReset().mockResolvedValueOnce(redirect("https://parent.example/terms")).mockResolvedValueOnce(new Response("terms"));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(followed("https://parent.example/terms")));
     expect(await fetchChosen(url, sites)).toMatchObject({ ok: true, url: "https://parent.example/terms" });
   });
 
-  it("bounds redirect loops and refuses hidden or missing destinations", async () => {
-    const fetcher = vi.fn().mockImplementation(async () => redirect(url));
-    vi.stubGlobal("fetch", fetcher);
-    expect(await fetchChosen(url)).toMatchObject({ ok: false, reason: "The page redirected too many times." });
-    expect(fetcher).toHaveBeenCalledTimes(6);
-    fetcher.mockReset().mockResolvedValue({ type: "opaqueredirect" });
-    expect(await fetchChosen(url)).toEqual({ ok: false, reason: BLOCKED_REASON });
-    fetcher.mockReset().mockResolvedValue(new Response(null, { status: 302 }));
-    expect(await fetchChosen(url)).toEqual({ ok: false, reason: BLOCKED_REASON });
+  it("never reads a redirect that ended off the site, on a private address or with a hidden address", async () => {
+    for (const target of ["https://other.example/privacy", "http://192.0.2.10/admin", "http://localhost/terms"]) {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(followed(target)));
+      expect(await fetchChosen(url)).toEqual({ ok: false, reason: OFF_SITE_REASON });
+    }
+    const hidden = new Response("terms");
+    Object.defineProperty(hidden, "redirected", { value: true });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(hidden));
+    expect(await fetchChosen(url)).toEqual({ ok: false, reason: OFF_SITE_REASON });
   });
 });

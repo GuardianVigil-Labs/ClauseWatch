@@ -64,10 +64,42 @@ describe("domain boundaries and external policies", () => {
   });
 });
 
+describe("language guesses never suppress the English rules", () => {
+  // A normal English policy on which the local estimate is not confident.
+  const page = (lang: string) => `<html lang="${lang}"><h1>Terms of Service</h1><p>Last updated: January 1, 2026</p><h2>1. Accounts</h2><h2>2. Payments</h2><p>Your subscription renews automatically each month until you cancel it.</p><h2>3. Disputes</h2><p>Any dispute arising from these terms will be resolved by binding arbitration rather than in court.</p><h2>4. Contact</h2></html>`;
+  const found = (r: ReturnType<typeof readDocument>) => r.status === "read" ? r.categories.filter((c) => c.status === "found").map((c) => c.category).sort() : [];
+
+  it("is a guess on this text, not a confident identification", () => {
+    const result = readDocument("terms", "", page(""), "text/html", rules);
+    expect(result).toMatchObject({ status: "read", coverage: { language: "en" } });
+    if (result.status === "read") expect(result.coverage?.confident).not.toBe(true);
+  });
+  it("finds the English clauses whatever language the page claims", () => {
+    const expected = found(readDocument("terms", "", page("en"), "text/html", rules));
+    expect(expected).toEqual(expect.arrayContaining(["arbitration", "auto_renewal"]));
+    for (const lang of ["", "es", "fr", "de", "xx"]) expect(found(readDocument("terms", "", page(lang), "text/html", rules)), lang).toEqual(expected);
+  });
+  it("runs the matching pack alongside the English rules and says so", () => {
+    const result = readDocument("terms", "", page("es"), "text/html", rules);
+    expect(result).toMatchObject({ status: "read", coverage: { language: "es", status: "supported" } });
+    const text = reportCards({ site: "service.example", documents: [result] }).map((c) => c.textContent).join(" ");
+    expect(text).toContain("alongside the English rules");
+    expect(text).not.toContain("English and custom rules are not applied");
+  });
+  it("treats a page marked with a language without a pack as English when the text is not identified", () => {
+    const result = readDocument("terms", "", page("de"), "text/html", rules);
+    const text = reportCards({ site: "service.example", documents: [result] }).map((c) => c.textContent).join(" ");
+    expect(text).toContain("could not be identified confidently");
+    expect(text).not.toContain("No built-in rule pack");
+    expect(text).toContain("Not found:");
+  });
+});
+
 describe("language and visibility coverage", () => {
-  it("marks declared unsupported languages and skips English topic checks", () => {
-    const result = readDocument("privacy", "", `<html lang="de"><h1>Privacy Policy</h1><p>Wir verwenden Ihre personenbezogenen Daten zur Bereitstellung unseres Dienstes und löschen Ihre Daten nach der Schließung Ihres Kontos.</p></html>`, "text/html", rules);
-    expect(result).toMatchObject({ status: "read", coverage: { status: "unsupported" }, categories: [] });
+  it("checks text identified as a language without a pack with the English rules, and never claims a topic is absent", () => {
+    const result = readDocument("privacy", "", `<html lang="de"><h1>Privacy Policy</h1><p>Diese Erklärung beschreibt, wie wir Ihre personenbezogenen Daten erheben, verwenden und weitergeben, wenn Sie unseren Dienst nutzen. Wir erheben die Informationen, die Sie uns bei der Erstellung eines Kontos geben, etwa Ihren Namen und Ihre E-Mail-Adresse. Sie können jederzeit die Löschung Ihres Kontos verlangen.</p></html>`, "text/html", rules);
+    expect(result).toMatchObject({ status: "read", coverage: { language: "de", status: "unsupported", confident: true } });
+    if (result.status === "read") expect(result.categories.map((c) => c.category).sort()).toEqual([...rules.categories].sort());
     const cards = reportCards({ site: "service.example", documents: [result] }).map((c) => c.textContent).join(" ");
     expect(cards).toContain("No built-in rule pack");
     expect(cards).not.toContain("0 found");
@@ -76,7 +108,7 @@ describe("language and visibility coverage", () => {
   it("detects unsupported text without language metadata and keeps uncertain text explicit", () => {
     const french = "Nous recueillons vos informations personnelles afin de fournir notre service. Vous pouvez demander la suppression de vos données et la fermeture de votre compte à tout moment. Nous ne partageons pas vos informations avec des entreprises publicitaires.";
     expect(languageCoverage(french).status).toBe("supported");
-    expect(languageCoverage("xyzzy qqqq 12345")).toEqual({ language: "und", status: "unknown" });
+    expect(languageCoverage("xyzzy qqqq 12345")).toEqual({ language: "und", status: "unknown", confident: false });
     expect(languageCoverage(clause).status).toBe("english");
   });
   it("excludes explicit hidden markers and inline CSS from extracted evidence", () => {

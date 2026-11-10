@@ -54,7 +54,7 @@ Chromium smoke checks do not establish live-provider compatibility, built-in mod
 
 | Area | Modules |
 |---|---|
-| Entry points | `entrypoints/background.ts`, `popup/`, `options/`, `welcome/`, `signup.content.ts` |
+| Entry points | `entrypoints/background.ts`, `popup/`, `options/`, `welcome/`, `signup.content.ts`, `signup-frame.content.ts` |
 | Download, identity and extraction | `src/auto/background.ts`, `src/engine/document.ts`, `documents.ts`, `rendered.ts`, `pdf*.ts` |
 | Rule matching and user rules | `src/engine/rules.ts`, `rule-set.ts`, `pattern-check.ts`, `rules-update.ts`, `verify.ts` |
 | Language selection | `src/engine/language.ts`, `language-packs.ts`, `rules/es/`, `rules/fr/` |

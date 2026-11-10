@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { findSignupForms, signupRoots, siteOf } from "../src/auto/detect";
+import { findSignupForms, siteOf } from "../src/auto/detect";
 
 const page = (html: string) => {
   document.body.innerHTML = html;
@@ -56,16 +56,14 @@ describe("findSignupForms", () => {
     host.hidden = false;
     expect(findSignupForms(root)).toHaveLength(1);
     expect(findSignupForms(root)[0]!.root).toBe(host);
-    expect(signupRoots(document)).toEqual([document, root]);
   });
-  it("discovers nested open roots and leaves closed roots alone", () => {
+  it("recognises a form in a nested open root", () => {
     document.body.innerHTML = '<div id="open"></div><div id="closed"></div>';
     const root = document.querySelector("#open")!.attachShadow({ mode: "open" });
     root.innerHTML = '<div id="nested"></div>';
     const nested = root.querySelector("#nested")!.attachShadow({ mode: "open" });
     nested.innerHTML = '<form><input type="email"><input type="password" autocomplete="new-password"></form>';
     document.querySelector("#closed")!.attachShadow({ mode: "closed" });
-    expect(signupRoots(document)).toEqual([document, root, nested]);
     expect(findSignupForms(nested)).toHaveLength(1);
   });
   it("never reads a field's value", () => {

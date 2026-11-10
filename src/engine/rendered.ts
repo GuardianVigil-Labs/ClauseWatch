@@ -29,8 +29,11 @@ export function captureRenderedPage(): PageSnapshot {
     if (skipped.has(tag) || node.hasAttribute("hidden") || node.getAttribute("aria-hidden")?.toLowerCase() === "true") continue;
     const style = getComputedStyle(node);
     if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse" || style.contentVisibility === "hidden" || style.opacity === "0") continue;
-    const label = (node.getAttribute("aria-label") || node.textContent || "").replace(/\s+/g, " ").trim().slice(0, 150);
-    if ((tag === "button" || node.getAttribute("role") === "button" || node.getAttribute("role") === "link" || (tag === "a" && (!node.getAttribute("href") || /^(#|javascript:)/i.test(node.getAttribute("href")!)))) && /terms|privacy|agreement|legal|conditions|data protection/i.test(label) && controls.length < 20) controls.push({ label, path });
+    // Only a control's own text: reading every ancestor's textContent would cost depth × page text.
+    if (controls.length < 20 && (tag === "button" || node.getAttribute("role") === "button" || node.getAttribute("role") === "link" || (tag === "a" && (!node.getAttribute("href") || /^(#|javascript:)/i.test(node.getAttribute("href")!))))) {
+      const label = (node.getAttribute("aria-label") || node.textContent || "").replace(/\s+/g, " ").trim().slice(0, 150);
+      if (/terms|privacy|agreement|legal|conditions|data protection/i.test(label)) controls.push({ label, path });
+    }
     // Keep structural metadata for banner exclusion, never page code or input values.
     const displayBlock = /^(block|flex|grid|list-item|table|flow-root)/.test(style.display);
     const inline = ["span", "em", "strong", "b", "i", "small", "label"].includes(tag);

@@ -66,14 +66,14 @@ Scan the PDF address, or use **Read this PDF** when the extension recognises the
 | English | The current English rule set: 19 bundled rules under 13 topics, plus applicable user rules and choices. |
 | Spanish | Pack version 1: data sale, automatic renewal and arbitration only. |
 | French | Pack version 1: data sale, automatic renewal and arbitration only. |
-| Other detected languages | Coverage notice and no topic results. |
+| Other detected languages | Coverage notice; English rules only, and topics are not listed as not found. |
 | Uncertain language | A notice and default English checks; topics may be missed. |
 
 Detection is an estimate, not translation. Manual document selection does not add language coverage. Spanish/French reads use their bundled pack instead of English or custom rules. See [rules](rules.md) for scope and limits.
 
 ## Automatic mode
 
-Enable it in **Settings → General** and grant site access. It recognises email/new-password fields or consent checkboxes without reading field values. It also supports sibling field containers, open shadow roots and permitted web iframes. Each iframe reads its own site's policies and displays its card inside that frame. Closed roots and restricted or opaque-origin frames are unsupported.
+Enable it in **Settings → General** and grant site access. It recognises email/new-password fields or consent checkboxes without reading field values. It also supports sibling field containers, open shadow roots and permitted web iframes. Each iframe reads its own site's policies once a sign-up field in it is focused; its report appears in the page's one card, not inside the frame. Closed roots and restricted or opaque-origin frames are unsupported.
 
 On known sign-up URLs the card can appear without a form. Single-page-app navigation and relevant field/visibility changes are observed. A login-only form is not meant to trigger a sign-up card.
 
@@ -134,7 +134,7 @@ In **Settings → AI help**, choose a model and endpoint for your own key. Chang
 |---|---|
 | Document name not recognised | Choose Terms or Privacy manually, then read it; confirm that it is the actual policy. |
 | Scripts, a bot check or sign-in hide the policy | Open it yourself, complete the site's steps, then use **Read visible policy**. |
-| An external host or hidden redirect is refused | Open the final policy URL yourself and scan that address or its visible tab. |
+| An external host or a redirect to another site is refused | Open the final policy URL yourself and scan that address or its visible tab. |
 | Image-only or password-protected PDF | Obtain an accessible text version or paste/select text after opening it yourself. |
 | Request timeout or excessive size | Open the policy directly, or read/select the relevant visible text. Partial downloads are not reported as complete policies. |
 | No highlight | Copy the quote and search the source. |

@@ -18,7 +18,7 @@ Hosts can observe ordinary network-request information. With the browser's built
 
 ## Reading pages
 
-Policy reading is initiated through the toolbar, a selected policy link, pasted or selected text, or automatic mode after you enable it and grant site access. Automatic mode recognises form structure, including permitted web frames and open shadow roots, without reading field values. Each frame reads policies for its own site. Turning the mode off or removing broad access stops already-injected automatic scripts and pending automatic reads.
+Policy reading is initiated through the toolbar, a selected policy link, pasted or selected text, or automatic mode after you enable it and grant site access. Automatic mode recognises form structure, including permitted web frames and open shadow roots, without reading field values. A frame gets the reader only when a sign-up field in it is focused, and reads policies for its own site; its report is shown in the page's card. Turning the mode off or removing broad access stops already-injected automatic scripts and pending automatic reads.
 
 Downloaded HTML is processed locally. Rendered-tab reading uses content already loaded by the browser; sign-in and page controls remain the user's responsibility. PDF text extraction runs locally without a conversion service or OCR upload.
 
@@ -34,14 +34,14 @@ Data is kept in browser extension storage, not browser sync storage. Removing th
 | Latest web-policy report | The most recently displayed report's quotes, nearby context, URLs, coverage, original rules version and save time. Limited to 256,000 characters and seven days. Reopening does not renew it. Pasted and selected text are excluded. |
 | Recently checked sites | Up to ten sites, with text fingerprints and hashed identities for up to twenty source documents per site. A source identity includes document type and canonical URL. These entries remain until displaced; their change badges expire after thirty days. The history does not retain full policy text. |
 | Manual scan jobs | Requested URLs, permission bookkeeping, any in-place document text, downloaded HTML/text/PDF checkpoints and results in `storage.session`. Payloads expire ten minutes after creation and also disappear at the end of the browser session. Cleanup prunes finished, released jobs to eight; shared payload-budget checks can remove older content early. Active jobs and unreleased permission bookkeeping are handled separately. |
-| Optional policy versions | Only after enabling comparisons and explicitly remembering a version: full policy text, source URL, type and date. At most 100,000 characters per version, two versions per source and three sources, for thirty days per version. Pasted text and oversized versions are excluded. |
+| Optional policy versions | Only after enabling comparisons and explicitly remembering a version: full policy text, source URL, type and date. At most 100,000 characters per version, two versions per source and three sources, for thirty days per version. Pasted and selected text and oversized versions are excluded. |
 | AI analysis checkpoints | Completed batch markers and verified findings in the open report's memory, for explicit retry. They are not persisted and are discarded when the report closes or is replaced. |
 
 Bounded excerpts and quotes may cover all of a very short policy. “No separate full-document body” does not mean a report contains no policy text.
 
 Expired automatic caches and saved reports/versions are removed on access where supported, at worker startup and on its fifteen-minute cleanup tick. Expired scan payloads are scrubbed on worker wake and the one-minute scan alarm, independently of permission release. A running scan has an expiry deadline and cannot checkpoint a late download. Minimal origin bookkeeping can remain until shared temporary access can be released. Cleanup resumes when the browser next runs. Obsolete shared scan-result and pending-scan slots from earlier versions are removed during worker startup.
 
-Only a successful read of both terms and privacy quiets a site for a week. Incomplete reads remain retryable. **Delete saved policy versions** removes comparison text and disables comparisons; an earlier in-flight save cannot bypass the comparison-generation check after that change.
+Only a successful read of both terms and privacy quiets a site for a week. Incomplete reads remain retryable. **Delete saved policy versions** removes comparison text and disables comparisons; an earlier in-flight save cannot bypass the comparison-generation check after that change, because every write, cleanup included, goes through one background queue.
 
 ## Optional AI help
 

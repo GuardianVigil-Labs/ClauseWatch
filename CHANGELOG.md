@@ -9,26 +9,26 @@ These changes describe the source checkout and are not a published release.
 ### Reading and scan reliability
 
 - Run link, This site and menu scans as independent recoverable jobs with immutable targets, progress, cancellation, retry and a persistent-tab launcher.
-- Finish downloads after the popup closes, recover worker interruptions, preserve prior/shared permissions and expire full scan payloads after ten minutes. Scrub expired content independently of permission release and remove obsolete shared scan-storage slots.
-- Bound downloads to 20 seconds and 2 MiB, validate visible redirects before following them, and explain hidden redirects and other failures with recovery paths.
+- Finish downloads after the popup closes, recover worker interruptions, preserve prior/shared permissions, remove temporary access once no active job uses it, and expire full scan payloads after ten minutes. Scrub expired content independently of permission release and remove obsolete shared scan-storage slots.
+- Bound downloads to 20 seconds and 2 MiB, check the final address of a followed redirect before reading it, and explain redirects to another site and other failures with recovery paths.
 - Read short policies and more agreement names; allow explicit type choice and rendered-tab reading with visibility notices, open shadow roots and user-operated policy controls.
 - Extract text-based PDFs locally in a bounded worker, explaining password-protected, image-only and oversized documents. Ship dependency licences.
 - Offer selected external policy hosts with permission, and use the bundled Public Suffix List for site boundaries.
-- Add limited Spanish and French recognition and version-1 packs for data sale, automatic renewal and arbitration; label unsupported and uncertain coverage.
+- Add limited Spanish and French recognition and version-1 packs for data sale, automatic renewal and arbitration; label unsupported and uncertain coverage. A language guess from page markup never replaces the English rules, and other languages are checked with the English rules.
 
 ### Findings and automatic mode
 
 - Prepare bundled English rules version 4, narrowing negations and preserving sale exceptions, opt-outs and renewal disclosures with reminders.
 - Retain later matches, supported list statements, exact source context and qualifications. Add browser-supported quote highlighting and surrounding-text controls for rule and AI findings.
 - Stop already-injected automatic scripts, cards and downloads when mode/access is disabled. Keep dismissed loading cards closed after completion.
-- Detect sibling signup fields, relevant attribute changes, SPA routes, open roots and permitted web frames, with frame-specific policy access. Show failures and retry only unfinished policy reads; complete terms-and-privacy reads alone quiet a site for a week.
+- Detect sibling signup fields, relevant attribute changes, SPA routes, open roots and permitted web frames when a field is focused, without polling the page; frames get the reader only when a sign-up field there is focused, and their report shows in the page's one card. Show failures and retry only unfinished policy reads; complete terms-and-privacy reads alone quiet a site for a week.
 
 ### Settings, history and report tools
 
 - Validate custom rules through the actual scanner, preserve scope on copy/import, enforce combined saved-rule budgets and show skipped rules. Serialize fresh-storage edits from concurrent Settings pages.
 - Compare history fingerprints only for the same document kind and source URL, and expire individual change badges on display. Legacy kind-only fingerprints establish new baselines.
 - Retain a bounded latest web-policy quote report for seven days with its original rule version and Check again.
-- Add opt-in, bounded local policy versions and exact paragraph comparisons with URLs/dates, deletion controls and thirty-day cleanup.
+- Add opt-in, bounded local policy versions of documents read from the web (never pasted or selected text) and exact paragraph comparisons with URLs/dates, deletion controls and thirty-day cleanup, all written through one background queue.
 - Add previewed plain-text/print report exports and local diagnostics excluding policy text, URLs, settings and credentials.
 - Use calendar-month GDPR response wording with permitted-extension notification, keeping CCPA's separate period.
 

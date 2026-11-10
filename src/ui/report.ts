@@ -108,8 +108,11 @@ export function reportCards(r: Report): HTMLElement[] {
   const cards = r.siteCard === false ? [] : [siteCard(r.site, r.documents)];
   for (const d of read) {
     const notes = [...(d.notices ?? [])];
-    if (d.coverage?.status === "unsupported") notes.push(`Language coverage: ${d.coverage.language}. No built-in rule pack covers this language; this document was not checked for topics.`);
-    if (d.coverage?.status === "supported") notes.push(`Language pack: ${d.coverage.language}, version 1. Limited coverage: data sale, automatic renewal and arbitration only. English and custom rules are not applied to this document.`);
+    if (otherLanguage(d)) notes.push(`Language coverage: ${d.coverage!.language}. No built-in rule pack covers this language; only the English rules were applied, so topics written in this language may be missed.`);
+    else if (d.coverage?.status === "unsupported") notes.push(`The page is marked as ${d.coverage.language}, but its language could not be identified confidently. The English rules were applied; topics may be missed.`);
+    if (d.coverage?.status === "supported") notes.push(d.coverage.confident === false
+      ? `Language pack: ${d.coverage.language}, version 1, applied alongside the English rules because the language could not be identified confidently.`
+      : `Language pack: ${d.coverage.language}, version 1. Limited coverage: data sale, automatic renewal and arbitration only. English and custom rules are not applied to this document.`);
     if (d.coverage?.status === "unknown") notes.push("Language could not be identified confidently. Default English checks were used; topics may be missed.");
     if (notes.length) {
       const card = el("section", undefined, "card");
@@ -125,11 +128,14 @@ export function reportCards(r: Report): HTMLElement[] {
     shown.add(key);
     cards.push(findingCard(d, c.category, f, r.onQuote));
   }
-  const absent = notFoundCard(read.filter((d) => d.coverage?.status !== "unsupported"));
+  const absent = notFoundCard(read.filter((d) => !otherLanguage(d)));
   if (absent) cards.push(absent);
   for (const d of r.documents) if (d.status === "could_not_read") cards.push(unreadCard(d));
   return cards;
 }
+
+/** Text identified as a language without a pack: English rules ran, so a missing topic proves nothing. */
+const otherLanguage = (d: DocumentResult) => d.status === "read" && d.coverage?.status === "unsupported" && d.coverage.confident !== false;
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, cls?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -155,7 +161,7 @@ function siteCard(site: string, documents: DocumentResult[]): HTMLElement {
   const who = el("div", undefined, "who");
   who.append(el("p", site, "name mono"), el("p", what, "meta"));
   card.append(el("span", site.replace(/^[^a-z0-9]+/i, "").slice(0, 1).toUpperCase() || "?", "initial"), who);
-  if (read.some((d) => d.coverage?.status !== "unsupported")) card.append(el("span", `${found} found`, `badge ${found ? "amber" : "plain"}`));
+  if (found || read.some((d) => !otherLanguage(d))) card.append(el("span", `${found} found`, `badge ${found ? "amber" : "plain"}`));
   return card;
 }
 

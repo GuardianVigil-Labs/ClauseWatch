@@ -18,7 +18,7 @@ function setup() {
     remove: async (id) => { records.delete(id); },
   };
   const fetch = vi.fn(async (url: string, _sites: KnownSite[], _signal: AbortSignal): Promise<Fetched> => ({ ok: true, url, text: "document", contentType: "text/html" }));
-  const allowed = vi.fn(async () => true);
+  const allowed = vi.fn(async (_origins: string[]) => true);
   const release = vi.fn(async () => {});
   const completed = vi.fn(async () => {});
   const io = { store, fetch, allowed, release, completed, now: () => now };
@@ -185,6 +185,64 @@ describe("independent background scans", () => {
     await x.store.put(job); await x.runner.wake();
     expect(x.records.get(job.id)).toMatchObject({ state: "failed", reason: "Storage quota exceeded", pages: {} });
     expect(x.release).toHaveBeenCalledWith([origin]);
+  });
+});
+
+describe("temporary access release", () => {
+  const other = "https://other.example/*";
+  const finished = (origins: string[], added: string[], state: ScanJob["state"] = "complete") => { const j = newJob(plan(), origins, added, "scan", 1000); j.state = state; return j; };
+
+  it("releases a finished job's access while an unrelated job is still waiting", async () => {
+    const x = setup(); x.allowed.mockResolvedValue(false);
+    const done = finished([origin], [origin]);
+    const waiting = newJob(plan("other.example"), [other], [other], "scan", 1001);
+    await x.store.put(done); await x.store.put(waiting);
+    await x.runner.wake();
+    expect(x.release).toHaveBeenCalledExactlyOnceWith([origin]);
+    expect(x.records.get(done.id)?.released).toBe(true);
+    expect(x.records.get(waiting.id)?.released).toBeUndefined();
+  });
+
+  it("never removes access a running job uses, and still removes it after that job ends even if it counted it as held", async () => {
+    const x = setup();
+    const done = finished([origin], [origin]);
+    const borrower = newJob(plan(), [origin], [], "scan", 1001);
+    await x.store.put(done); await x.store.put(borrower);
+    x.fetch.mockImplementation(async (url) => { expect(x.release).not.toHaveBeenCalled(); return { ok: true, url, text: "t", contentType: "text/html" }; });
+    await x.runner.wake();
+    expect(x.release).toHaveBeenCalledExactlyOnceWith([origin]);
+    expect(x.records.get(done.id)?.released).toBe(true);
+  });
+
+  it("releases access when a running job is cancelled, without waiting for another job's prompt", async () => {
+    const x = setup();
+    const job = newJob(plan(), [origin], [origin], "scan", 1000);
+    const prompt = newJob(plan("other.example"), [other], [other], "scan", 1001);
+    await x.store.put(job); await x.store.put(prompt);
+    x.allowed.mockImplementation(async (origins: string[]) => origins[0] === origin);
+    let entered!: () => void;
+    const started = new Promise<void>((r) => { entered = r; });
+    x.fetch.mockImplementation((_url, _sites, signal) => new Promise((resolve) => { entered(); signal.addEventListener("abort", () => resolve({ ok: false, reason: "cancelled" })); }));
+    const running = x.runner.wake(); await started;
+    await x.runner.cancel(job.id); await running;
+    expect(x.release).toHaveBeenCalledExactlyOnceWith([origin]);
+    expect(x.records.get(prompt.id)?.state).toBe("waiting");
+  });
+
+  it("after a worker restart, keeps access for the recovered job and removes the rest; a failed removal is retried", async () => {
+    const x = setup();
+    const done = finished([other], [other]);
+    const interrupted = newJob(plan(), [origin], [origin], "scan", 1001); interrupted.state = "running";
+    await x.store.put(done); await x.store.put(interrupted);
+    x.release.mockRejectedValueOnce(new Error("busy"));
+    const restarted = new ScanJobs(x.io);
+    await restarted.recover();
+    x.fetch.mockImplementation(async (url) => { expect(x.release.mock.calls.flat(2)).not.toContain(origin); return { ok: true, url, text: "t", contentType: "text/html" }; });
+    await restarted.wake();
+    expect(x.records.get(done.id)?.released).toBeUndefined();
+    await restarted.wake();
+    expect(x.release).toHaveBeenLastCalledWith([other, origin]);
+    expect([...x.records.values()].every((j) => j.released)).toBe(true);
   });
 });
 

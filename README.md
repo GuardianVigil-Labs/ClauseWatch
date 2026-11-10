@@ -50,7 +50,7 @@ Text-based PDF extraction runs locally. External policy links are fetched only a
 |---|---|
 | English | 19 bundled rules under 13 topics; newer verified signed English releases can replace them. |
 | Spanish and French | Three rules per bundled language pack: data sale, automatic renewal and arbitration. Other topics are not presented as checked. |
-| Other or uncertain languages | Coverage is labelled. Unsupported languages receive no topic checks; uncertain text uses default English checks with a notice. |
+| Other or uncertain languages | Coverage is labelled. Other languages are checked with the English rules only; uncertain text, or a language known only from the page's markup, uses the English rules (with the Spanish or French pack where it applies) and a notice. |
 | Downloads | At most 2 MiB per request, a 20-second deadline and checked redirects. Sites requiring browser execution or authentication need the tab fallback. |
 | PDFs | Text-based policies only: at most 100 pages, 200,000 extracted characters and 15 seconds of extraction. No OCR. |
 | Source verification | Quotes and nearby context are retained. Matching is bounded pattern detection, not complete legal interpretation. |

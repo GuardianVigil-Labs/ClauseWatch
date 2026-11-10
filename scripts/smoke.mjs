@@ -8,6 +8,7 @@ import { makePdf } from "../tests/helpers/pdf.ts";
 import { chromium } from "playwright";
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { createServer } from "node:http";
 import { join, resolve } from "node:path";
 
 // SMOKE_EXT tests another build, such as a release zip unpacked (docs/releasing.md).
@@ -218,7 +219,17 @@ try {
 const autoExt = mkdtempSync(join(tmpdir(), "cw-smoke-ext-"));
 const autoProfile = mkdtempSync(join(tmpdir(), "cw-smoke-auto-"));
 let auto;
+// Routed responses cannot redirect a fetch, so redirects come from a real
+// local server, reached under invented names mapped to it in this browser only.
+const redirector = createServer((req, res) => {
+  if (req.url === "/moved") res.writeHead(301, { location: "/legal/terms" });
+  else if (req.url === "/away") res.writeHead(302, { location: "http://elsewhere.example/terms" });
+  else res.writeHead(200, { "content-type": "text/html" }).write(`<h1>Terms of Service</h1><p>${TERMS}</p>`);
+  res.end();
+});
 try {
+  await new Promise((ready) => redirector.listen(0, "127.0.0.1", ready));
+  const redirectPort = redirector.address().port;
   cpSync(ext, autoExt, { recursive: true });
   const manifest = JSON.parse(readFileSync(join(autoExt, "manifest.json"), "utf8"));
   manifest.host_permissions = [...(manifest.host_permissions ?? []), "<all_urls>"];
@@ -231,7 +242,7 @@ try {
   writeFileSync(bg, `{const e=chrome.contextMenus.onClicked,a=e.addListener.bind(e);e.addListener=(f)=>{globalThis.__cwMenuClick=f;a(f);};chrome.action.openPopup=()=>Promise.reject(new Error("test"));}\n${readFileSync(bg, "utf8")}`);
   auto = await chromium.launchPersistentContext(autoProfile, {
     channel: process.env.SMOKE_CHANNEL ?? "chromium",
-    args: [`--disable-extensions-except=${autoExt}`, `--load-extension=${autoExt}`],
+    args: [`--disable-extensions-except=${autoExt}`, `--load-extension=${autoExt}`, `--host-resolver-rules=MAP redirect.example 127.0.0.1:${redirectPort}, MAP elsewhere.example 127.0.0.1:${redirectPort}`],
   });
   // An invented service: a sign-up page linking to its terms, both served here; nothing else is reached.
   await auto.route(/^https?:/, (route) => {
@@ -463,10 +474,15 @@ try {
   await iframePage.goto("https://iframe.example/join");
   await iframePage.frameLocator("iframe").locator('input[type="email"]').focus();
   const embedded = iframePage.frames().find((frame) => frame.url() === "https://embedded.example/join");
-  const frameAX = await auto.newCDPSession(embedded);
-  await waitNames(frameAX, (n) => n.some((t) => t.includes("binding arbitration")));
+  const topAX = await auto.newCDPSession(iframePage);
+  const topNames = await waitNames(topAX, (n) => n.some((t) => t.includes("binding arbitration")));
   const frameCache = await w.evaluate(async () => (await chrome.storage.local.get("docs:embedded.example"))["docs:embedded.example"]);
   check(frameCache?.documents?.every((d) => d.url.startsWith("https://embedded.example/")) && !calls.has("iframe.example/terms"), "a permitted cross-origin iframe reads and caches only its own site's policies");
+  const frameNames = await names(await auto.newCDPSession(embedded));
+  const quietButtons = (await topAX.send("Accessibility.getFullAXTree")).nodes.filter((n) => n.role?.value === "button" && n.name?.value === "Don't show on this site");
+  check(topNames.includes("Don't show on this site") && quietButtons.length === 1 && !frameNames.includes("Don't show on this site"), `a frame's report is shown in the tab's one card, in the top frame (${quietButtons.length} in the top frame, ${frameNames.includes("Don't show on this site") ? "one" : "none"} in the frame)`);
+  const registeredScripts = await w.evaluate(() => chrome.scripting.getRegisteredContentScripts());
+  check(registeredScripts.find((s) => s.js?.[0] === "content-scripts/signup.js")?.allFrames === false && registeredScripts.find((s) => s.js?.[0] === "content-scripts/signup-frame.js")?.allFrames === true, "the reader runs in top frames only; frames get only the small field check");
 
   // The right-click menu: both items exist, and each opens its result.
   const menus = await w.evaluate(async () => {
@@ -571,6 +587,24 @@ try {
   }
   check(completedJobs.length === 2 && completedJobs.every((job) => job.state === "complete" && job.result?.fetched?.pages[job.plan.url]?.ok), "both overlapping scans finish after their viewer closes");
   check(await w.evaluate(() => chrome.permissions.contains({ origins: ["https://*/*", "http://*/*"] })), "scans preserve the site access held before they started");
+
+  // Redirects are followed by the browser itself; the final address is checked.
+  await auto.route(/^http:\/\/(redirect|elsewhere)\.example\//, (route) => route.continue());
+  const redirectViewer = await auto.newPage();
+  await redirectViewer.goto(`chrome-extension://${new URL(w.url()).host}/popup.html?screen=scan`);
+  for (const path of ["moved", "away"]) {
+    await redirectViewer.locator("#scan-address").fill(`http://redirect.example/${path}`);
+    await redirectViewer.getByRole("button", { name: "Scan", exact: true }).click();
+  }
+  let redirectJobs = [];
+  for (const until = Date.now() + 5000; Date.now() < until; await new Promise((resolve) => setTimeout(resolve, 100))) {
+    redirectJobs = (await scanJobs()).filter((job) => job.plan.url.startsWith("http://redirect.example/"));
+    if (redirectJobs.length === 2 && redirectJobs.every((job) => job.state === "complete")) break;
+  }
+  const redirected = (path) => redirectJobs.find((job) => job.plan.url.endsWith(path))?.result?.fetched?.pages[`http://redirect.example/${path}`];
+  check(redirected("moved")?.ok === true && redirected("moved")?.url === "http://redirect.example/legal/terms", `a same-site redirect is followed in the built extension (${JSON.stringify(redirected("moved")?.url ?? redirected("moved")?.reason ?? null)})`);
+  check(redirected("away")?.ok === false && /another site/.test(redirected("away")?.reason ?? ""), `a redirect to another site is not read (${JSON.stringify(redirected("away")?.reason ?? null)})`);
+  await redirectViewer.close();
 
   // Reader coverage: CSS visibility, client-rendered shadow roots, external
   // host opt-in, JavaScript controls and real local PDF parsing.
@@ -696,6 +730,7 @@ try {
 
 } finally {
   await auto?.close();
+  redirector.close();
   rmSync(autoExt, { recursive: true, force: true });
   rmSync(autoProfile, { recursive: true, force: true });
 }

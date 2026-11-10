@@ -40,9 +40,7 @@ export function withinKnownSite(end: string, start: string, sites: KnownSite[]):
 export type Fetched = { ok: true; url: string; text: string; contentType: string; pdf?: string } | { ok: false; reason: string };
 
 export const FETCH_TIMEOUT_MS = 20_000;
-const MAX_REDIRECTS = 5;
 export const OFF_SITE_REASON = "The page redirected to another site, which ClauseWatch does not read for it.";
-export const BLOCKED_REASON = "The browser hid this redirect's destination. Open the policy in a tab and use This site to read it.";
 export const TIMEOUT_REASON = "The page took too long to respond. Try again.";
 export const CANCELLED_REASON = "The scan was cancelled.";
 const TOO_LARGE_REASON = "The page is too large to read.";
@@ -65,58 +63,46 @@ export async function fetchText(url: string, staysOn?: (nextUrl: string) => bool
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   let response: Response | undefined;
   try {
-    let current = url;
-    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-      if (controller.signal.aborted) await aborted;
-      response = await Promise.race([fetch(current, { credentials: "omit", redirect: "manual", signal: controller.signal }), aborted]);
-      if (response.type === "opaqueredirect") return { ok: false, reason: BLOCKED_REASON };
-      if (response.status >= 300 && response.status < 400) {
-        const location = response.headers.get("location");
-        if (!location) return { ok: false, reason: BLOCKED_REASON };
-        const next = new URL(location, current);
-        if (!mayFetch(next.href, next.href) || !(staysOn ? staysOn(next.href) : mayFetch(next.href, url))) return { ok: false, reason: OFF_SITE_REASON };
-        if (hop === MAX_REDIRECTS) return { ok: false, reason: "The page redirected too many times." };
-        if (response.body) void response.body.cancel().catch(() => undefined);
-        response = undefined;
-        current = next.href;
-        continue;
+    if (controller.signal.aborted) await aborted;
+    // Browsers hide a manual redirect's destination (an opaque redirect), so
+    // the browser follows redirects without cookies and the address the
+    // answer finally came from is checked before anything is read from it.
+    response = await Promise.race([fetch(url, { credentials: "omit", redirect: "follow", signal: controller.signal }), aborted]);
+    const end = response.url || url;
+    if (response.redirected && !response.url) return { ok: false, reason: OFF_SITE_REASON };
+    if (response.url && (!mayFetch(end, end) || !(staysOn ? staysOn(end) : mayFetch(end, url)))) return { ok: false, reason: OFF_SITE_REASON };
+    if (!response.ok) return { ok: false, reason: `The page answered ${response.status}.` };
+    const declared = Number(response.headers.get("content-length"));
+    if (Number.isFinite(declared) && declared > MAX_BYTES) return { ok: false, reason: TOO_LARGE_REASON };
+    const pdfChunks: Uint8Array[] = [];
+    let isPdf = response.headers.get("content-type")?.toLowerCase().includes("application/pdf") ?? false;
+    const decoder = new TextDecoder();
+    const chunks: string[] = [];
+    let bytes = 0;
+    if (response.body) {
+      reader = response.body.getReader();
+      while (true) {
+        const part = await Promise.race([reader.read(), aborted]);
+        if (part.done) break;
+        bytes += part.value.byteLength;
+        if (bytes > MAX_BYTES) return { ok: false, reason: TOO_LARGE_REASON };
+        if (bytes === part.value.byteLength && new TextDecoder().decode(part.value.subarray(0, 5)) === "%PDF-") isPdf = true;
+        pdfChunks.push(part.value);
+        if (!isPdf) chunks.push(decoder.decode(part.value, { stream: true }));
       }
-      if (!response.ok) return { ok: false, reason: `The page answered ${response.status}.` };
-      // Also reject an unexpected final address (including a mocked/foreign fetch implementation).
-      if (response.url && !(staysOn ? staysOn(response.url) : mayFetch(response.url, url))) return { ok: false, reason: OFF_SITE_REASON };
-      const declared = Number(response.headers.get("content-length"));
-      if (Number.isFinite(declared) && declared > MAX_BYTES) return { ok: false, reason: TOO_LARGE_REASON };
-      const pdfChunks: Uint8Array[] = [];
-      let isPdf = response.headers.get("content-type")?.toLowerCase().includes("application/pdf") ?? false;
-      const decoder = new TextDecoder();
-      const chunks: string[] = [];
-      let bytes = 0;
-      if (response.body) {
-        reader = response.body.getReader();
-        while (true) {
-          const part = await Promise.race([reader.read(), aborted]);
-          if (part.done) break;
-          bytes += part.value.byteLength;
-          if (bytes > MAX_BYTES) return { ok: false, reason: TOO_LARGE_REASON };
-          if (bytes === part.value.byteLength && new TextDecoder().decode(part.value.subarray(0, 5)) === "%PDF-") isPdf = true;
-          pdfChunks.push(part.value);
-          if (!isPdf) chunks.push(decoder.decode(part.value, { stream: true }));
-        }
-      }
-      if (!isPdf) {
-        let signature = "";
-        for (const chunk of pdfChunks) { signature += String.fromCharCode(...chunk.subarray(0, 5 - signature.length)); if (signature.length === 5) break; }
-        isPdf = signature === "%PDF-";
-      }
-      if (isPdf) {
-        const binary: string[] = [];
-        for (const chunk of pdfChunks) for (let offset = 0; offset < chunk.length; offset += 8192) binary.push(String.fromCharCode(...chunk.subarray(offset, offset + 8192)));
-        return { ok: true, url: response.url || current, text: "", contentType: "application/pdf", pdf: btoa(binary.join("")) };
-      }
-      chunks.push(decoder.decode());
-      return { ok: true, url: response.url || current, text: chunks.join(""), contentType: response.headers.get("content-type") ?? "" };
     }
-    return { ok: false, reason: "The page redirected too many times." };
+    if (!isPdf) {
+      let signature = "";
+      for (const chunk of pdfChunks) { signature += String.fromCharCode(...chunk.subarray(0, 5 - signature.length)); if (signature.length === 5) break; }
+      isPdf = signature === "%PDF-";
+    }
+    if (isPdf) {
+      const binary: string[] = [];
+      for (const chunk of pdfChunks) for (let offset = 0; offset < chunk.length; offset += 8192) binary.push(String.fromCharCode(...chunk.subarray(offset, offset + 8192)));
+      return { ok: true, url: end, text: "", contentType: "application/pdf", pdf: btoa(binary.join("")) };
+    }
+    chunks.push(decoder.decode());
+    return { ok: true, url: end, text: chunks.join(""), contentType: response.headers.get("content-type") ?? "" };
   } catch {
     return { ok: false, reason: signal?.aborted ? CANCELLED_REASON : timedOut ? TIMEOUT_REASON : "The page could not be reached." };
   } finally {

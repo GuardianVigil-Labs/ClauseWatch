@@ -211,12 +211,14 @@ describe("redirects within a known site", () => {
     vi.unstubAllGlobals();
   });
 
-  it("does not follow a redirect whose destination the browser hides", async () => {
-    const { fetchText, BLOCKED_REASON } = await import("../src/auto/background");
-    const fetchMock = vi.fn().mockResolvedValue({ type: "opaqueredirect", status: 0 });
+  it("lets the browser follow redirects, and reads only an answer whose address it can see", async () => {
+    const { fetchText, OFF_SITE_REASON } = await import("../src/auto/background");
+    const hidden = new Response("terms", { status: 200 });
+    Object.defineProperty(hidden, "redirected", { value: true });
+    const fetchMock = vi.fn().mockResolvedValue(hidden);
     vi.stubGlobal("fetch", fetchMock);
-    expect(await fetchText("https://www.service.example/terms")).toEqual({ ok: false, reason: BLOCKED_REASON });
-    expect(fetchMock).toHaveBeenCalledExactlyOnceWith("https://www.service.example/terms", { credentials: "omit", redirect: "manual", signal: expect.any(AbortSignal) });
+    expect(await fetchText("https://www.service.example/terms")).toEqual({ ok: false, reason: OFF_SITE_REASON });
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith("https://www.service.example/terms", { credentials: "omit", redirect: "follow", signal: expect.any(AbortSignal) });
     vi.unstubAllGlobals();
   });
 });

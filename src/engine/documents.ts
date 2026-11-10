@@ -94,13 +94,13 @@ export function readDocument(kind: Kind, url: string, content: string, contentTy
   if (wordCount(doc) < rules.minQuoteWords) return { kind, status: "could_not_read", url, reason: `Not enough readable text. At least ${rules.minQuoteWords} words are needed. Open the policy in a tab after its text has loaded.` };
   if (!language && type.includes("html")) language = new DOMParser().parseFromString(content, "text/html").documentElement.lang;
   const coverage = languageCoverage(doc.body, language);
-  const activeRules = languageRules(coverage.language, rules);
+  const activeRules = languageRules(coverage, rules);
   if (!explicitKind && (!DOCUMENT_NAMES[kind].test(identityText(content, type, doc.body)) || accessWall(doc))) {
-    return { kind, status: "could_not_read", url, reason: coverage.status === "unsupported" ? `Language coverage: ${coverage.language}. No built-in rule pack covers this language. Choose the document type to view its text without topic checks.` : "The document type could not be recognised. Choose Terms or Privacy to read the text, or open the policy in a tab after it has loaded." };
+    return { kind, status: "could_not_read", url, reason: coverage.status === "unsupported" && coverage.confident ? `Language coverage: ${coverage.language}. No built-in rule pack covers this language. Choose the document type to check it with the English rules only.` : "The document type could not be recognised. Choose Terms or Privacy to read the text, or open the policy in a tab after it has loaded." };
   }
   return { kind, status: "read", url, readAt: new Date().toISOString(), body: doc.body, coverage,
     notices: [...(rules.skipped?.length ? [`${rules.skipped.length} custom rules did not run. Review Settings → Rules for details.`] : []), ...(explicitKind ? ["You chose the document type. ClauseWatch has not verified that this text is the complete policy."] : []), ...(!rendered && (type.includes("html") || !type) ? ["Read from downloaded HTML. Visibility controlled by styles or scripts could not be verified; use the visible-page reader to check what is displayed."] : [])],
-    categories: coverage.status === "unsupported" ? [] : byCategory(analyse(doc, activeRules), activeRules) };
+    categories: byCategory(analyse(doc, activeRules), activeRules) };
 
 }
 
@@ -113,8 +113,8 @@ export function readSelection(text: string, url: string, rules: CompiledRules): 
   const doc = buildDocument(textToBlocks(text));
   if (wordCount(doc) < rules.minQuoteWords) return { kind: "terms", status: "could_not_read", url, reason: `Select at least ${rules.minQuoteWords} words of the terms.` };
   const coverage = languageCoverage(doc.body);
-  const activeRules = languageRules(coverage.language, rules);
-  return { kind: "terms", status: "read", url, readAt: new Date().toISOString(), body: doc.body, coverage, notices: rules.skipped?.length ? [`${rules.skipped.length} custom rules did not run. Review Settings → Rules for details.`] : [], categories: coverage.status === "unsupported" ? [] : byCategory(analyse(doc, activeRules), activeRules) };
+  const activeRules = languageRules(coverage, rules);
+  return { kind: "terms", status: "read", url, readAt: new Date().toISOString(), body: doc.body, coverage, notices: rules.skipped?.length ? [`${rules.skipped.length} custom rules did not run. Review Settings → Rules for details.`] : [], categories: byCategory(analyse(doc, activeRules), activeRules) };
 }
 
 /** Which kinds of document a page itself is, if any. */

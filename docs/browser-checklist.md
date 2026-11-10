@@ -32,14 +32,14 @@ Native browser prompts, real menu gestures, built-in model availability, live-pr
 - [ ] Start two scans before the first finishes: each keeps its own request and result.
 - [ ] Cancel a slow scan: it stops, shows cancelled, and can be retried.
 - [ ] Read with an individually granted site permission already held: it is still held after the scan.
-- [ ] A redirect whose destination is hidden stops with an explanation; opening the final policy in a tab and choosing **This site** still works.
+- [ ] A policy address that redirects within its site is read from its final address; one that redirects to another site stops with an explanation.
 
 - [ ] Read a short policy, then manually read text whose heading is not recognised; the manual choice is labelled.
 - [ ] Read a policy loaded by JavaScript inside an open shadow root. Hidden text must not appear as a quote.
 - [ ] Discover a page policy control; focusing it must not click, submit or accept anything.
 - [ ] Select an external policy host and grant access; it is read only after selection. Automatic mode must not fetch it.
 - [ ] Scan a text-based PDF and verify its quoted sentences. Image-only or password-protected files show an explanation.
-- [ ] Read Spanish and French policies: only the three declared pack topics are checked. Read an unsupported language: no topic results appear. Uncertain-language fallback is clearly labelled.
+- [ ] Read Spanish and French policies: only the three declared pack topics are checked. Read an English policy on a page marked `lang="es"` or `lang="de"`: the English findings still appear. Read another language: its notice says only the English rules ran and no topic is listed as not found. Uncertain-language fallback is clearly labelled.
 
 - [ ] Check a sale permission with an opt-out, renewal with a reminder, and an explicit exception after a denial. The full qualified sentence is quoted.
 - [ ] “We will not change these terms without notice” is not shown as a changes-without-notice finding.
@@ -56,7 +56,7 @@ Native browser prompts, real menu gestures, built-in model availability, live-pr
 
 - [ ] In Settings → **General**, turn **Automatic mode** on. The browser asks for access to all sites; allow it.
 - [ ] Open a sign-up form and click into it. The card appears before you type anything.
-- [ ] Repeat with email/password fields in sibling containers without a form, a dynamically attached open shadow root, and a permitted cross-origin iframe. The iframe's card and policy sources belong to its own site.
+- [ ] Repeat with email/password fields in sibling containers without a form, a dynamically attached open shadow root, and a permitted cross-origin iframe. The iframe's policy sources belong to its own site, and its report appears in the page's one card.
 - [ ] Change a login password field's `autocomplete` to `new-password`, or make a CSS-hidden sign-up form visible, without adding fields. Focusing it shows the card.
 - [ ] Navigate to a known sign-up route using `pushState`, `replaceState`, and back/forward without reloading. The card appears once for the route; login-only routes do not trigger it.
 - [ ] Close a loading card before its download finishes. It stays closed after completion.

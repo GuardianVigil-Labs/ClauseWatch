@@ -1,12 +1,15 @@
 import type { DocumentResult } from "../engine/documents";
 import type { CompiledRules } from "../engine/rules";
-import { cleanSaved } from "../storage-retention";
+import { MAX_VERSION_BODY, type PolicyVersion } from "../storage-retention";
 import { kv } from "../storage";
 import { jobStore } from "../scan/client";
+import { isOwnText } from "./scan";
 
-const KEEP_MS = 30 * 864e5;
-const MAX_BODY = 100_000;
-interface Version { url: string; kind: string; at: string; body: string }
+/** Only the text of a policy document the extension read from a web address: never pasted or right-clicked selected text. */
+export function versionDocuments(site: string, docs: DocumentResult[]): Extract<DocumentResult, { status: "read" }>[] {
+  if (isOwnText(site)) return [];
+  return docs.filter((d): d is Extract<DocumentResult, { status: "read" }> => d.status === "read" && !!d.body && /^https?:/.test(d.url));
+}
 export function compareClauses(before: string, after: string) {
   const clauses = (s: string) => s.split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean);
   const a = clauses(before), b = clauses(after), old = new Set(a), next = new Set(b);
@@ -56,31 +59,27 @@ export function reportTools(site: string, docs: DocumentResult[], rules: Compile
   };diag.append(prepare);box.append(diag);
   const versions=node("details");versions.append(node("summary","Policy changes (local, optional)"));
   const enable=node("button","Keep policy versions on this device");
-  const status=node("p","Off by default. Enabling stores complete policy text locally for comparisons: up to 100,000 characters per document, two versions per source, three sources, thirty days. Pasted text is excluded. Same text at a different URL starts a new baseline. No upload.");
+  const status=node("p","Off by default. Enabling stores complete policy text locally for comparisons: up to 100,000 characters per document, two versions per source, three sources, thirty days. Pasted and selected text is excluded. Same text at a different URL starts a new baseline. No upload.");
   const compare=node("button","Compare and remember this version");const clear=node("button","Delete saved policy versions");
   enable.onclick=async()=>{await browser.runtime.sendMessage({type:"versions:edit",edit:{type:"enable"}});status.textContent="Local comparisons enabled. Use Compare and remember after each scan.";};
   clear.onclick=async()=>{await browser.runtime.sendMessage({type:"versions:edit",edit:{type:"clear"}});status.textContent="Saved policy text deleted; comparisons disabled.";};
   compare.onclick=async()=>{
+    const eligible=versionDocuments(site,docs);
+    if(!eligible.length){status.textContent="Only policy documents read from a web address can be kept. Pasted and selected text is never stored.";return;}
     if(await kv.get("policyVersionsEnabled")!==true){status.textContent="Enable local comparisons first.";return;}
     const generation = Number(await kv.get("policyVersionsGeneration")) || 0;
-    await cleanSaved(kv);
-    const old=await kv.get("policyVersions") as Version[][]|undefined;
-    const stored=(Array.isArray(old)?old:[]).filter((g)=>g.length && Date.now()-Date.parse(g.at(-1)!.at)<KEEP_MS);
     const output=node("div");
-    for(const d of docs){
-      if(d.status!=="read"||!d.body||!/^https?:/.test(d.url))continue;
-      if(d.body.length>MAX_BODY){output.append(node("p",`${d.kind}: too large to retain; no partial comparison saved.`));continue;}
-      const index=stored.findIndex((g)=>g[0]?.url===d.url&&g[0]?.kind===d.kind);
-      const group=index<0?[]:stored.splice(index,1)[0]!;
-      const previous=group.at(-1);
+    const kept=eligible.filter((d)=>{if(d.body.length<=MAX_VERSION_BODY)return true;output.append(node("p",`${d.kind}: too large to retain; no partial comparison saved.`));return false;});
+    const documents:PolicyVersion[]=kept.map((d)=>({url:d.url,kind:d.kind,at:d.readAt,body:d.body}));
+    // The background merges, cleans and writes in its one queue, and returns the earlier versions.
+    const saved = documents.length ? await browser.runtime.sendMessage({type:"versions:edit",edit:{type:"remember",generation,documents}}) as false|{previous:(PolicyVersion|undefined)[]} : false;
+    if (documents.length && !saved) { status.textContent="Comparison settings changed; no policy text was saved. Try again if comparisons are enabled."; return; }
+    kept.forEach((d,i)=>{
+      const previous=saved?saved.previous[i]:undefined;
       output.append(node("h3",`${d.kind} · ${d.url}`));
       if(previous){const diff=compareClauses(previous.body,d.body);output.append(node("p",`Previous: ${previous.at}; current: ${d.readAt}. Exact paragraph comparison; reordered/duplicate paragraphs are not classified as edits.`));for(const s of diff.removed)output.append(node("p","Removed:"),node("blockquote",s));for(const s of diff.added)output.append(node("p","Added:"),node("blockquote",s));if(!diff.added.length&&!diff.removed.length)output.append(node("p","No paragraph text changes."));}
       else output.append(node("p","First version at this URL; no earlier text to compare."));
-      if(!previous||previous.body!==d.body)group.push({url:d.url,kind:d.kind,at:d.readAt,body:d.body});
-      stored.push(group.slice(-2));
-    }
-    const saved = await browser.runtime.sendMessage({type:"versions:edit",edit:{type:"write",generation,versions:stored.slice(-3)}});
-    if (!saved) { status.textContent="Comparison settings changed; no policy text was saved. Try again if comparisons are enabled."; return; }
+    });
     status.replaceChildren(output);
   };
   versions.append(status,enable,compare,clear);box.append(versions);return box;

@@ -153,3 +153,46 @@ describe("automatic content lifecycle", () => {
     expect(readFirst).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("automatic mode's cost on a page", () => {
+  it("never walks the page on its one-second check", async () => {
+    await boot('<div><input type="email"><input type="password" autocomplete="new-password"></div>' + "<div><p>Filler</p></div>".repeat(50));
+    const documentQueries = vi.spyOn(document, "querySelectorAll");
+    const elementQueries = vi.spyOn(Element.prototype, "querySelectorAll");
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(documentQueries).not.toHaveBeenCalled();
+    expect(elementQueries).not.toHaveBeenCalled();
+    expect(readFirst).not.toHaveBeenCalled();
+  });
+
+  it("in a frame, shows no card of its own, sends its report to the top frame, and runs no timer", async () => {
+    vi.stubGlobal("top", {});
+    const timers = vi.spyOn(globalThis, "setInterval");
+    await boot();
+    expect(timers).not.toHaveBeenCalled();
+    focus(); await flush();
+    expect(document.querySelector("[popover]")).toBeNull();
+    const cards = send.mock.calls.map(([m]) => m).filter((m) => m.type === "auto:card");
+    expect(cards[0]).toEqual({ type: "auto:card", documents: null });
+    expect(cards.at(-1)?.documents?.map((d: DocumentResult) => d.kind)).toEqual(["terms", "privacy"]);
+    expect(fillReport).not.toHaveBeenCalled();
+  });
+
+  it("in the top frame, shows a frame's report in its one card unless its own card is up", async () => {
+    await boot("<p>Welcome</p>");
+    const show = (documents: DocumentResult[] | null) => message({ type: "auto:show", site: "embedded.example", documents } as { type: string }, { id: "extension" });
+    show(null);
+    expect(document.querySelectorAll("[popover]")).toHaveLength(1);
+    show([success("terms"), success("privacy")]);
+    expect(document.querySelectorAll("[popover]")).toHaveLength(1);
+    expect(report()?.site).toBe("embedded.example");
+    window.dispatchEvent(new Event("pagehide"));
+    vi.mocked(fillReport).mockClear();
+    await boot();
+    focus(); await flush();
+    expect(report()?.site).toBe(location.hostname.replace(/^www\./, ""));
+    show([success("terms")]);
+    expect(report()?.site).not.toBe("embedded.example");
+    expect(document.querySelectorAll("[popover]")).toHaveLength(1);
+  });
+});

@@ -203,14 +203,23 @@ export class ScanJobs {
     if (size > MAX_SESSION_CHARS) throw new Error("There is not enough room to keep this scan. Cancel another scan and try again.");
   }
 
+  /**
+   * The only place temporary access is removed, inside the drain queue, so a
+   * job never starts or runs while its access is being removed. A finished job
+   * stays unreleased while an active job uses any origin it added; the origin
+   * is removed once no active job uses it. Access is removed before a job is
+   * marked released, so heldOrigins never mistakes it for earlier access.
+   */
   private async releasePermissions(): Promise<void> {
     const jobs = await this.io.store.list();
-    // An origin borrowed by a second queued job is not removed underneath it.
-    if (jobs.some(activeJob)) return;
-    const unreleased = jobs.filter((j) => !j.released);
-    const origins = [...new Set(unreleased.flatMap((j) => j.addedOrigins))];
-    if (origins.length) await this.io.release(origins);
-    for (const job of unreleased) { if (this.now() - job.at >= JOB_TTL_MS) clearPayload(job); job.released = true; await this.io.store.put(job); }
+    const inUse = new Set(jobs.filter(activeJob).flatMap((j) => j.origins));
+    const done = jobs.filter((j) => !activeJob(j) && !j.released && !j.addedOrigins.some((o) => inUse.has(o)));
+    const origins = [...new Set(done.flatMap((j) => j.addedOrigins))];
+    if (origins.length) {
+      // A failed removal is retried on the next wake; the jobs stay unreleased.
+      try { await this.io.release(origins); } catch { return; }
+    }
+    for (const job of done) { if (this.now() - job.at >= JOB_TTL_MS) clearPayload(job); job.released = true; await this.io.store.put(job); }
   }
 
   private async prune(): Promise<void> {

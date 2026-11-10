@@ -8,7 +8,7 @@ This repository is public. Every file, commit message, branch name, issue, pull 
 
 | Path | What it holds |
 |---|---|
-| `entrypoints/` | The extension's entry points (WXT): `background.ts` (service worker), `popup/`, `options/` (Settings), `welcome/` (first-run setup), `signup.content.ts` (automatic mode's card). |
+| `entrypoints/` | The extension's entry points (WXT): `background.ts` (service worker), `popup/`, `options/` (Settings), `welcome/` (first-run setup), `signup.content.ts` (automatic mode's card), `signup-frame.content.ts` (its small frame check). |
 | `src/engine/` | Reading documents and matching rules: `document.ts` (HTML to text blocks), `documents.ts` (finding and recognising terms and privacy pages), `rules.ts`, `rule-set.ts`, `pattern-check.ts`, `known-sites.ts`, `verify.ts`, `rules-update.ts`, `trusted-keys.ts`, `bundled.ts`. |
 | `src/scan/` | Independent recoverable scan jobs and permission-aware clients. |
 | `src/storage-retention.ts` | Expiry of saved quote reports and opt-in policy versions. |

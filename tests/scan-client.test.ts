@@ -28,6 +28,14 @@ describe("scan permission handoff", () => {
     expect(second.job.addedOrigins).toEqual([]);
   });
 
+  it("counts access another scan added and has not released as temporary, not held", async () => {
+    const lent = { id: "a", released: false, addedOrigins: [temporary] };
+    const gone = { id: "b", released: true, addedOrigins: [kept] };
+    const get = vi.fn(async () => ({ [jobKey("a")]: lent, [jobKey("b")]: gone, other: 1 }));
+    vi.stubGlobal("browser", { storage: { session: { get } }, permissions: { contains: vi.fn(async () => true) } });
+    expect(await heldOrigins([kept, temporary])).toEqual([kept]);
+  });
+
   it("cancels its own request when access is denied", async () => {
     const send = vi.fn(async () => true);
     vi.stubGlobal("browser", { storage: { session: { set: vi.fn(async () => {}) } }, permissions: { request: vi.fn(async () => false) }, runtime: { sendMessage: send } });

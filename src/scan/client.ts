@@ -10,9 +10,15 @@ export const jobStore: JobStore = {
   remove: (id) => browser.storage.session.remove(jobKey(id)),
 };
 
-/** Prepare before a click so the permission snapshot predates the grant. */
+/**
+ * Prepare before a click so the permission snapshot predates the grant. Access
+ * another scan added and has not released yet is temporary, not held: the
+ * jobs are read first, and the background removes access before marking a job
+ * released, so a release racing this snapshot is never counted as held.
+ */
 export async function heldOrigins(origins: string[]): Promise<string[]> {
-  const held = await Promise.all(origins.map((origin) => browser.permissions.contains({ origins: [origin] }).catch(() => false)));
+  const temporary = new Set((await jobStore.list().catch(() => [])).filter((j) => !j.released).flatMap((j) => j.addedOrigins));
+  const held = await Promise.all(origins.map((origin) => !temporary.has(origin) && browser.permissions.contains({ origins: [origin] }).catch(() => false)));
   return origins.filter((_, i) => held[i]);
 }
 

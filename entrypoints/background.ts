@@ -3,7 +3,7 @@
 // menu. It reads no page and observes no browsing; pages reach it only as
 // messages from the extension's own pages and scripts, or a right-click.
 
-import { cleanSaved } from "../src/storage-retention";
+import { applyVersionEdit, cleanSaved, type VersionEdit } from "../src/storage-retention";
 import { kv } from "../src/storage";
 import { AUTO_ORIGINS, cachedDocs, docsStale, fetchChosen, LOCAL_REASON, pageFetch, pruneDocs, readKey, rememberIfCurrent } from "../src/auto/background";
 import { readSelection, type DocumentResult } from "../src/engine/documents";
@@ -17,6 +17,12 @@ import { ScanJobs, FOCUS_KEY, JOB_PREFIX, newJob, type ScanPlan } from "../src/s
 import { jobStore, heldOrigins } from "../src/scan/client";
 
 const AUTO_SCRIPT = "clausewatch-signup";
+const AUTO_FRAME_SCRIPT = "clausewatch-signup-frame";
+/** The reader runs in top frames; frames get only a small script that asks for it when a sign-up field is focused. */
+const AUTO_SCRIPTS = [
+  { id: AUTO_SCRIPT, matches: AUTO_ORIGINS, js: ["content-scripts/signup.js"], runAt: "document_idle" as const, allFrames: false },
+  { id: AUTO_FRAME_SCRIPT, matches: AUTO_ORIGINS, js: ["content-scripts/signup-frame.js"], runAt: "document_idle" as const, allFrames: true },
+];
 const automaticReads = new Set<AbortController>();
 const stopAutomaticReads = () => { for (const controller of automaticReads) controller.abort(); };
 const automaticAllowed = async () => (await kv.get("automatic")) === true && await browser.permissions.contains({ origins: AUTO_ORIGINS });
@@ -24,14 +30,20 @@ async function notifyAutomatic(): Promise<void> {
   const tabs = await browser.tabs.query({});
   await Promise.all(tabs.map((tab) => tab.id === undefined ? undefined : browser.tabs.sendMessage(tab.id, { type: "auto:sync" }).catch(() => undefined)));
 }
-const cleanDocs = async () => { await pruneDocs(kv, await browser.storage.local.get(null)); await cleanSaved(kv); };
+const cleanDocs = async () => { await pruneDocs(kv, await browser.storage.local.get(null)); await editVersions(() => cleanSaved(kv)); };
 const MENU_LINK = "clausewatch-link";
 let editingRules: Promise<unknown> = Promise.resolve();
 let editingVersions: Promise<unknown> = Promise.resolve();
+/** The one queue for saved policy versions: edits from extension pages and their cleanup. */
+function editVersions<T>(apply: () => Promise<T>): Promise<T> {
+  const next = editingVersions.then(apply, apply);
+  editingVersions = next.catch(() => undefined);
+  return next;
+}
 const MENU_SELECTION = "clausewatch-selection";
 
 /** What remembered documents are read with, this extension version included: an update reads sites afresh. */
-const docsKey = () => readKey(kv, `${browser.runtime.getManifest().version}:rules-${BUNDLED.version}:packs-es-fr-1`);
+const docsKey = () => readKey(kv, `${browser.runtime.getManifest().version}:rules-${BUNDLED.version}:packs-es-fr-1:english-fallback`);
 
 /** The known sites in use, kept at hand: the menu must ask for access without waiting (Firefox). */
 let knownSites = BUNDLED.sites ?? [];
@@ -53,14 +65,13 @@ function syncAutomatic(): Promise<void> {
 
 async function syncAutomaticNow(): Promise<void> {
   const on = await automaticAllowed();
-  const registered = (await browser.scripting.getRegisteredContentScripts({ ids: [AUTO_SCRIPT] })).length > 0;
-  if (on && !registered) {
-    await browser.scripting.registerContentScripts([{ id: AUTO_SCRIPT, matches: AUTO_ORIGINS, js: ["content-scripts/signup.js"], runAt: "document_idle", allFrames: true }]).catch(() => undefined);
-  } else if (on && registered) {
-    await browser.scripting.updateContentScripts([{ id: AUTO_SCRIPT, allFrames: true, js: ["content-scripts/signup.js"] }]);
-  } else if (!on && registered) {
-    await browser.scripting.unregisterContentScripts({ ids: [AUTO_SCRIPT] });
-  }
+  const registered = (await browser.scripting.getRegisteredContentScripts({ ids: AUTO_SCRIPTS.map((s) => s.id) })).map((s) => s.id);
+  const missing = AUTO_SCRIPTS.filter((s) => !registered.includes(s.id));
+  const present = AUTO_SCRIPTS.filter((s) => registered.includes(s.id));
+  if (on && missing.length) await browser.scripting.registerContentScripts(missing).catch(() => undefined);
+  // Updated in place: an earlier version registered the reader in every frame.
+  if (on && present.length) await browser.scripting.updateContentScripts(present);
+  if (!on && registered.length) await browser.scripting.unregisterContentScripts({ ids: registered });
   if (!on) stopAutomaticReads();
   await notifyAutomatic();
 }
@@ -210,6 +221,21 @@ export default defineBackground(() => {
     if (sender.id !== browser.runtime.id) return;
     const m = message as { type?: string; key?: unknown; url?: unknown; site?: unknown; documents?: unknown; id?: unknown; edit?: unknown };
     if (m?.type === "auto:state") return automaticAllowed().catch(() => false);
+    // A sign-up field was focused in a frame: add the reader to that frame only.
+    const tabId = sender.tab?.id;
+    if (m?.type === "auto:frame" && tabId !== undefined && sender.frameId) {
+      const frameId = sender.frameId;
+      return (async () => {
+        if (!(await automaticAllowed())) return false;
+        await browser.scripting.executeScript({ target: { tabId, frameIds: [frameId] }, files: ["/content-scripts/signup.js"] });
+        return true;
+      })().catch(() => false);
+    }
+    // A frame's report, for the top frame's card. Its site is the frame's own address.
+    if (m?.type === "auto:card" && tabId !== undefined && sender.frameId && sender.url && URL.canParse(sender.url)) {
+      const show = { type: "auto:show", site: siteOf(sender.url), documents: Array.isArray(m.documents) ? m.documents : null };
+      return automaticAllowed().then((on) => on && browser.tabs.sendMessage(tabId, show, { frameId: 0 })).then(() => true, () => false);
+    }
     if (m?.type === "fetch-text" && typeof m.url === "string") {
       const url = m.url;
       // A frame reads its own site's policies, never its embedding tab's policies.
@@ -227,26 +253,7 @@ export default defineBackground(() => {
     }
     // Job control belongs to extension pages, not scripts injected into a website.
     const extensionPage = sender.url?.startsWith(browser.runtime.getURL("/"));
-    if (extensionPage && m?.type === "versions:edit") {
-      const edit = m.edit as { type: string; generation?: number; versions?: { body: string; url: string; at: string; kind: string }[][] };
-      const apply = async () => {
-        if (!edit) return false;
-        const generation = Number(await kv.get("policyVersionsGeneration")) || 0;
-        if (edit.type === "enable" || edit.type === "clear") {
-          await kv.set("policyVersionsGeneration", generation + 1);
-          if (edit.type === "clear") await kv.remove("policyVersions");
-          await kv.set("policyVersionsEnabled", edit.type === "enable");
-          return true;
-        }
-        if (edit.type !== "write" || edit.generation !== generation || await kv.get("policyVersionsEnabled") !== true) return false;
-        const groups = edit.versions;
-        if (!Array.isArray(groups) || groups.length > 3 || !groups.every((g) => Array.isArray(g) && g.length <= 2 && g.every((v) => typeof v?.body === "string" && v.body.length <= 100000 && typeof v.url === "string" && /^https?:/.test(v.url) && URL.canParse(v.url) && ["terms", "privacy"].includes(v.kind) && Number.isFinite(Date.parse(v.at))))) return false;
-        await kv.set("policyVersions", groups);
-        return true;
-      };
-      editingVersions = editingVersions.then(apply, apply);
-      return editingVersions;
-    }
+    if (extensionPage && m?.type === "versions:edit") return editVersions(() => applyVersionEdit(kv, m.edit as VersionEdit));
     if (extensionPage && m?.type === "rules:edit") {
       const edit = m.edit as RuleEdit;
       const apply = async () => {

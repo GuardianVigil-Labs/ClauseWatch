@@ -5,6 +5,10 @@
 // starts filling one in, shows what the site's terms and privacy policy say.
 // On a known site's sign-up page (rules/sites.json) the card shows when the
 // page opens, form or not. It never reads what is typed, and never blocks a page.
+//
+// It runs in the top frame. A frame gets it only when a sign-up field there is
+// focused (signup-frame.content.ts asks the background); a frame shows nothing
+// itself and its report is shown in the top frame's card: one card per tab.
 
 import { captureRenderedPage } from "../src/engine/rendered";
 import { BUNDLED } from "../src/engine/bundled";
@@ -16,7 +20,7 @@ import { discoverLinks, kindsOfPage, KINDS, readDocument, type DocumentResult, t
 import { readFirst } from "../src/ui/scan";
 import { completeDocs, type Fetched } from "../src/auto/background";
 import { inPlaceKinds, isSignupPage, knownSite, type KnownSite } from "../src/engine/known-sites";
-import { findSignupForms, signupRoots, siteOf, type SignupForm } from "../src/auto/detect";
+import { findSignupForms, siteOf } from "../src/auto/detect";
 import { fillReport } from "../src/ui/report";
 import { isMuted, mute, shouldShowCard } from "../src/ui/sites";
 
@@ -26,8 +30,8 @@ export default defineContentScript({
   matches: ["https://*/*", "http://*/*"],
   registration: "runtime",
   runAt: "document_idle",
-  allFrames: true,
   async main() {
+    const isTop = window === window.top;
     // A newer signed update when one is stored and still verifies, with the
     // person's choices and own rules; its known sites too.
     const fileP = currentRulesFile(kv, BUNDLED).catch(() => BUNDLED);
@@ -35,8 +39,7 @@ export default defineContentScript({
     // Put together only when a page's documents are read, never on pages that read nothing.
     const ruleSet = () => (rulesP ??= fileP.then((f) => loadRules(kv, compileRules(f))));
     const site = siteOf(location.href);
-    let handled = new WeakSet<HTMLElement>();
-    let card: { host: HTMLElement; body: HTMLElement; dispose: () => void } | null = null;
+    let card: { host: HTMLElement; body: HTMLElement; label: HTMLElement; site: string; dispose: () => void } | null = null;
     let docs: DocumentResult[] = [];
     let started: Promise<void> | null = null;
     let active = false;
@@ -45,8 +48,6 @@ export default defineContentScript({
     let completed = false;
     let route = location.href;
     let lifecycle = new AbortController();
-    const observers = new Map<Document | ShadowRoot, MutationObserver>();
-    let timer: number | undefined;
     let poll: ReturnType<typeof setInterval> | undefined;
     const valid = (epoch: number) => active && epoch === generation;
     function start(): Promise<void> | undefined {
@@ -115,8 +116,13 @@ export default defineContentScript({
       }
     }
 
-    function showCard(): NonNullable<typeof card> {
-      if (card) return card;
+    /** The tab's one card, labelled with the site whose documents it shows. */
+    function showCard(forSite = site): NonNullable<typeof card> {
+      if (card) {
+        card.site = forSite;
+        card.label.textContent = ` · ${forSite}`;
+        return card;
+      }
       const host = document.createElement("div");
       host.setAttribute("popover", "manual");
       const root = host.attachShadow({ mode: "closed" });
@@ -138,7 +144,7 @@ export default defineContentScript({
       title.style.cssText = "display:flex;align-items:center;gap:6px;color:#fafafa;flex:1;";
       // The site, for screen readers.
       const where = document.createElement("span");
-      where.textContent = ` · ${site}`;
+      where.textContent = ` · ${forSite}`;
       where.style.cssText = "position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;";
       title.append(markSvg(), "ClauseWatch", where);
       const close = document.createElement("button");
@@ -189,7 +195,7 @@ export default defineContentScript({
       guard.observe(document.documentElement, { childList: true });
       guard.observe(host, { attributes: true, attributeFilter: ["style", "popover", "hidden", "class", "inert"] });
       guard.observe(document, { childList: true }); // the root itself replaced
-      card = { host, body, dispose: () => { guard.disconnect(); clearInterval(keep); } };
+      card = { host, body, label: where, site: forSite, dispose: () => { guard.disconnect(); clearInterval(keep); } };
       return card;
     }
 
@@ -223,7 +229,8 @@ export default defineContentScript({
         if (!muted) void send({ type: "badge" });
         return;
       }
-      showCard().body.textContent = "Reading this site's terms…";
+      if (isTop) showCard().body.textContent = "Reading this site's terms…";
+      else void send({ type: "auto:card", documents: null }).catch(() => undefined);
       let result: DocumentResult[];
       try {
         result = await readDocuments(cached, knownSite(file.sites ?? [], location.hostname), epoch);
@@ -237,13 +244,17 @@ export default defineContentScript({
       render();
     }
 
-    /** The card's content: the quotes, and the way to quiet this site. */
-    function render() {
+    /**
+     * The card's content: the quotes, and the way to quiet this site. In a
+     * frame, the documents go to the top frame's card instead.
+     */
+    function render(forSite = site, documents = docs) {
       if (!active || dismissed) return;
-      const c = showCard();
+      if (!isTop) { void send({ type: "auto:card", documents }).catch(() => undefined); return; }
+      const c = showCard(forSite);
       // A plain element with a closed shadow root: content scripts have no custom elements.
       const report = document.createElement("div");
-      fillReport(report.attachShadow({ mode: "closed" }), { site, documents: docs, siteCard: false });
+      fillReport(report.attachShadow({ mode: "closed" }), { site: forSite, documents, siteCard: false });
       // Set here, so a page's own --cw-* variables never restyle the card.
       report.style.setProperty("--cw-font", "ui-sans-serif, system-ui, sans-serif");
       report.style.setProperty("--cw-mono", "ui-monospace, SFMono-Regular, monospace");
@@ -251,7 +262,7 @@ export default defineContentScript({
       const quiet = button("Don't show on this site");
       quiet.addEventListener("click", (e) => {
         if (!e.isTrusted) return;
-        void mute(kv, site).then(() => {
+        void mute(kv, forSite).then(() => {
           dismissed = true;
           card?.dispose();
           card = null;
@@ -260,7 +271,15 @@ export default defineContentScript({
       });
       const retry = button("Try again");
       retry.addEventListener("click", (e) => { if (e.isTrusted) void start(); });
-      c.body.replaceChildren(...(docs.length ? [report] : []), ...(!completeDocs(docs) ? [retry] : []), disclaimer, quiet);
+      // A frame's reading is retried from the frame, by focusing its form again.
+      c.body.replaceChildren(...(documents.length ? [report] : []), ...(forSite === site && !completeDocs(documents) ? [retry] : []), disclaimer, quiet);
+    }
+
+    /** A frame's report, shown in this (top) frame's card unless this page's own card is up. */
+    function showFrame(frameSite: string, documents: DocumentResult[] | null) {
+      if (!active || dismissed || started || (card && card.site === site)) return;
+      if (documents) render(frameSite, documents);
+      else showCard(frameSite).body.textContent = "Reading this site's terms…";
     }
 
     function button(text: string, primary = false): HTMLButtonElement {
@@ -274,16 +293,26 @@ export default defineContentScript({
       return b;
     }
 
-    function watch(form: SignupForm, scope: Document | ShadowRoot) {
-      if (handled.has(form.root)) return;
-      handled.add(form.root);
-      // When the person starts filling the form in.
-      form.root.addEventListener("focusin", () => {
-        if (findSignupForms(scope).some((f) => f.root === form.root)) void start();
-      }, { signal: lifecycle.signal });
-      const root = form.root.getRootNode();
-      if (form.root.contains(document.activeElement) || root instanceof ShadowRoot && form.root.contains(root.activeElement)) void start();
+    /** Whether an element belongs to a sign-up or consent form in its document or open shadow root. */
+    function inSignupForm(el: EventTarget | null | undefined): boolean {
+      if (!(el instanceof HTMLElement)) return false;
+      const root = el.getRootNode();
+      return (root === document || root.nodeType === Node.DOCUMENT_FRAGMENT_NODE) && findSignupForms(root as Document | ShadowRoot).some((f) => holds(f.root, el));
     }
+    /** Containment across shadow boundaries: a form in a shadow root may be held by its host. */
+    function holds(container: Node, el: Node): boolean {
+      for (let n: Node | null = el; n; n = n.parentNode ?? (n as ShadowRoot).host ?? null) if (n === container) return true;
+      return false;
+    }
+    /** The focused element, inside open shadow roots too. */
+    function focused(): Element | null {
+      let el = document.activeElement;
+      while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement;
+      return el;
+    }
+    // Checked when the person starts filling a form in, not by watching the page:
+    // focus events come out of open shadow roots, attached late or not.
+    const onFocus = (e: Event) => { if (inSignupForm(e.composedPath()[0] ?? e.target)) void start(); };
 
     // A known site's sign-up page shows its card when it opens, sign-up form or not:
     // many sign up with a single button, which no form check can see.
@@ -294,23 +323,6 @@ export default defineContentScript({
       const known = knownSite(f.sites ?? [], location.hostname);
       if (known && isSignupPage(known, location.href)) void start();
     }
-    const schedule = () => {
-      clearTimeout(timer);
-      timer = window.setTimeout(scan, 250);
-    };
-    function scan() {
-      if (!active) return;
-      const roots = signupRoots(document);
-      for (const [root, observer] of observers) if (root instanceof ShadowRoot && !root.host.isConnected) { observer.disconnect(); observers.delete(root); }
-      for (const root of roots) {
-        if (!observers.has(root)) {
-          const observer = new MutationObserver(schedule);
-          observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ["type", "name", "id", "autocomplete", "placeholder", "aria-label", "aria-labelledby", "form", "hidden", "aria-hidden", "inert", "class", "style"] });
-          observers.set(root, observer);
-        }
-        findSignupForms(root).forEach((form) => watch(form, root));
-      }
-    }
     function navigate() {
       if (!active || location.href === route) return;
       route = location.href;
@@ -319,21 +331,15 @@ export default defineContentScript({
       completed = dismissed = false;
       card?.dispose(); card?.host.remove(); card = null;
       docs = [];
-      scan();
-      for (const root of signupRoots(document)) {
-        if (findSignupForms(root).some((f) => f.root.contains(root.activeElement))) void start();
-      }
+      if (inSignupForm(focused())) void start();
       void checkKnown().catch(() => undefined);
     }
     function stop() {
       active = false;
       generation++;
       lifecycle.abort();
-      for (const observer of observers.values()) observer.disconnect();
-      observers.clear();
-      clearTimeout(timer); clearInterval(poll);
+      clearInterval(poll);
       card?.dispose(); card?.host.remove(); card = null;
-      handled = new WeakSet();
       started = null;
       completed = dismissed = false;
       docs = [];
@@ -349,13 +355,15 @@ export default defineContentScript({
       active = true;
       lifecycle = new AbortController();
       route = location.href;
+      document.addEventListener("focusin", onFocus, { capture: true, signal: lifecycle.signal });
+      if (inSignupForm(focused())) void start();
+      if (!isTop) return;
       window.addEventListener("popstate", navigate, { signal: lifecycle.signal });
       window.addEventListener("hashchange", navigate, { signal: lifecycle.signal });
-      scan();
       void checkKnown().catch(() => undefined);
-      // pushState/replaceState do not emit DOM events in an isolated script.
-      // Also discovers a shadow attached to an already-existing host.
-      poll = setInterval(() => { navigate(); scan(); }, 1000);
+      // pushState/replaceState do not emit DOM events in an isolated script:
+      // the top frame compares its address each second, and nothing more.
+      poll = setInterval(navigate, 1000);
     }
     browser.storage.onChanged.addListener((changes, area) => {
       if (area === "local" && "automatic" in changes) {
@@ -364,7 +372,9 @@ export default defineContentScript({
       }
     });
     browser.runtime.onMessage.addListener((message, sender) => {
-      if (sender.id === browser.runtime.id && message?.type === "auto:sync") void sync();
+      if (sender.id !== browser.runtime.id) return;
+      if (message?.type === "auto:sync") void sync();
+      if (isTop && message?.type === "auto:show" && typeof message.site === "string") showFrame(message.site, Array.isArray(message.documents) ? message.documents : null);
     });
     window.addEventListener("pagehide", () => { syncingState++; stop(); });
     window.addEventListener("pageshow", () => void sync());
