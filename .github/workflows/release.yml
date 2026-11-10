@@ -139,6 +139,8 @@ jobs:
           code=$(curl -sS -o "$out" -w '%{http_code}' --max-time 300 --retry 3 -X POST \
             -H "Authorization: Bearer $token" -H "Content-Type: application/zip" -T "$zip" \
             "https://chromewebstore.googleapis.com/upload/v2/$item:upload")
+          # Every response needs its documented HTTP status before any field is trusted.
+          if [ "$code" != 200 ]; then echo "::error::Chrome Web Store: upload refused, HTTP $code $(jq -r '.error.message // empty' "$out" 2>/dev/null)"; exit 1; fi
           state=$(jq -r '.uploadState // .error.status // "unknown"' "$out")
           echo "Chrome Web Store upload: HTTP $code, $state"
           # A large package is processed asynchronously: poll for at most 10 minutes.
@@ -147,6 +149,7 @@ jobs:
             sleep 10
             code=$(curl -sS -o "$out" -w '%{http_code}' --max-time 60 --retry 3 \
               -H "Authorization: Bearer $token" "https://chromewebstore.googleapis.com/v2/$item:fetchStatus")
+            if [ "$code" != 200 ]; then echo "::error::Chrome Web Store: upload status failed, HTTP $code $(jq -r '.error.message // empty' "$out" 2>/dev/null)"; exit 1; fi
             state=$(jq -r '.lastAsyncUploadState // .error.status // "unknown"' "$out")
             echo "Chrome Web Store upload status: HTTP $code, $state"
           done
@@ -154,6 +157,7 @@ jobs:
           code=$(curl -sS -o "$out" -w '%{http_code}' --max-time 60 --retry 3 -X POST \
             -H "Authorization: Bearer $token" -H "Content-Type: application/json" -d '{"publishType":"DEFAULT_PUBLISH"}' \
             "https://chromewebstore.googleapis.com/v2/$item:publish")
+          if [ "$code" != 200 ]; then echo "::error::Chrome Web Store: publish refused, HTTP $code $(jq -r '.error.message // empty' "$out" 2>/dev/null)"; exit 1; fi
           state=$(jq -r '.state // .error.status // "unknown"' "$out")
           echo "Chrome Web Store publish: HTTP $code, $state"
           case "$code $state" in
@@ -196,6 +200,10 @@ jobs:
             local code status
             for _ in $(seq 120); do
               code=$(curl -sS -o "$out" -w '%{http_code}' --max-time 60 --retry 3 "${auth[@]}" "$1")
+              if [ "$code" != 200 ]; then
+                echo "::error::Edge Add-ons: $label status failed, HTTP $code $(jq -r '.message // empty' "$out" 2>/dev/null)"
+                return 1
+              fi
               status=$(jq -r '.status // "unknown"' "$out")
               case "$status" in
                 Succeeded) echo "Edge Add-ons $label: $status"; return 0 ;;

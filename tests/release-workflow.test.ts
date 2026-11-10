@@ -45,6 +45,18 @@ describe("release workflow", () => {
     expect(stores).not.toMatch(/actions\/checkout|npm ci|npm run/);
   });
 
+  it("checks the HTTP status of every store call before reading its response", () => {
+    const lines = jobs.stores!.split("\n");
+    const calls = lines.flatMap((line, i) => (/\bcurl /.test(line) ? [i] : []));
+    expect(calls).toHaveLength(6);
+    for (const i of calls) {
+      expect(lines[i], lines[i]).toMatch(/code=\$\(curl -sS -o "\$out" .*-w '%\{http_code\}' --max-time \S+ --retry 3/);
+      const read = lines.findIndex((line, j) => j > i && /jq [^\n]*"\$out"/.test(line));
+      const checked = lines.slice(i + 1, read + 1).some((line) => /\[ "\$code" != 20[02] \]/.test(line));
+      expect(checked, lines[i]).toBe(true);
+    }
+  });
+
   it("uses store secrets nowhere outside the stores job", () => {
     const names = /secrets\.(CHROME|EDGE|AMO)_/;
     expect(jobs.stores).toMatch(names);
