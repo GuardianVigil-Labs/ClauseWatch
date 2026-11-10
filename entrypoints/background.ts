@@ -100,7 +100,7 @@ const scans = new ScanJobs({
   completed: (job) => openResult(job.id),
 });
 let ready: Promise<void> = Promise.resolve();
-const wakeScans = () => ready.then(async () => { await scans.expire(); await scans.wake(); }).catch(() => undefined);
+const wakeScans = (answered?: string) => ready.then(async () => { await scans.expire(); await scans.wake(answered); }).catch(() => undefined);
 
 function createMenus(): void {
   void browser.contextMenus.removeAll().then(() => {
@@ -195,8 +195,9 @@ export default defineBackground(() => {
         const held = await before;
         const job = newJob(plan, origins, origins.filter((o) => !held.includes(o)), "menu");
         await jobStore.put(job);
-        if (!(await asked)) await scans.cancel(job.id);
-        await wakeScans();
+        const granted = await asked;
+        if (!granted) await scans.cancel(job.id);
+        await wakeScans(granted ? job.id : undefined);
         if ((await jobStore.get(job.id))?.state === "cancelled") await openResult(job.id);
       })().catch(() => undefined);
       return;
@@ -266,7 +267,7 @@ export default defineBackground(() => {
       editingRules = editingRules.then(apply, apply);
       return editingRules;
     }
-    if (extensionPage && m?.type === "scan:wake") { void wakeScans(); return Promise.resolve(true); }
+    if (extensionPage && m?.type === "scan:wake") { void wakeScans(typeof m.id === "string" ? m.id : undefined); return Promise.resolve(true); }
     if (extensionPage && m?.type === "scan:cancel" && typeof m.id === "string") return ready.then(() => scans.cancel(m.id as string));
     const tabSite = sender.tab && sender.url && URL.canParse(sender.url) && /^https?:/.test(sender.url) ? new URL(sender.url).hostname.replace(/^www\./, "") : null;
     // The key says what the documents are read with; a put whose key is no longer current is dropped.

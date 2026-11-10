@@ -229,34 +229,57 @@ describe("temporary access release", () => {
     expect(x.records.get(prompt.id)?.state).toBe("waiting");
   });
 
-  it("ends, rather than strands, a scan submitted while its access was being removed", async () => {
+  it("ends a menu scan whose granted access was removed before it was saved, without fetching", async () => {
     const x = setup();
     let granted = true;
     x.allowed.mockImplementation(async () => granted);
-    await x.store.put(finished([origin], [origin]));
-    let late!: ScanJob;
-    // The new request finds the access still there, then the removal completes.
-    x.release.mockImplementationOnce(async () => {
-      late = newJob(plan(), [origin], [origin], "menu", 1002);
-      await x.store.put(late);
-      granted = false;
-    });
+    const done = finished([origin], [origin]);
+    await x.store.put(done);
+    // The menu request finds the temporary access still there and is granted.
+    // The removal completes, then the job is saved and wakes the queue.
+    x.release.mockImplementationOnce(async () => { granted = false; });
     await x.runner.wake();
+    expect(x.records.get(done.id)?.released).toBe(true);
+    const late = newJob(plan(), [origin], [origin], "menu", 1002);
+    await x.store.put(late);
+    await x.runner.wake();
+    expect(x.records.get(late.id)?.state).toBe("waiting");
+    await x.runner.wake(late.id);
     expect(x.records.get(late.id)?.state).toBe("failed");
-    expect(x.records.get(late.id)?.reason).toMatch(/Scan again/);
+    expect(x.records.get(late.id)?.reason).toBe("Access to this site changed while the scan was starting. Select Scan again.");
     expect(x.completed).toHaveBeenCalledOnce();
     expect(x.fetch).not.toHaveBeenCalled();
   });
 
-  it("keeps a scan submitted during removal waiting when its access is there after removal", async () => {
+  it("fails an answered scan that has no access promptly, rather than at expiry", async () => {
+    const x = setup(); x.allowed.mockResolvedValue(false);
+    const job = newJob(plan(), [origin], [origin], "scan", 1000);
+    await x.store.put(job);
+    await x.runner.wake(job.id);
+    expect(x.records.get(job.id)?.state).toBe("failed");
+    expect(x.records.get(job.id)?.reason).toMatch(/Select Scan again/);
+    expect(x.completed).not.toHaveBeenCalled();
+    expect(x.fetch).not.toHaveBeenCalled();
+  });
+
+  it("completes an answered scan that has its access", async () => {
     const x = setup();
-    await x.store.put(finished([origin], [origin]));
-    let late!: ScanJob;
-    x.release.mockImplementationOnce(async () => { late = newJob(plan(), [origin], [origin], "scan", 1002); await x.store.put(late); });
-    await x.runner.wake();
-    expect(x.records.get(late.id)?.state).toBe("waiting");
-    await x.runner.wake();
-    expect(x.records.get(late.id)?.state).toBe("complete");
+    const job = newJob(plan(), [origin], [origin], "menu", 1000);
+    await x.store.put(job);
+    await x.runner.wake(job.id);
+    expect(x.records.get(job.id)?.state).toBe("complete");
+    expect(x.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a scan whose prompt is still open waiting until it is granted", async () => {
+    const x = setup(); x.allowed.mockResolvedValue(false);
+    const job = newJob(plan(), [origin], [origin], "menu", 1000);
+    await x.store.put(job);
+    await x.runner.wake(); await x.runner.wake();
+    expect(x.records.get(job.id)?.state).toBe("waiting");
+    x.allowed.mockResolvedValue(true);
+    await x.runner.wake(job.id);
+    expect(x.records.get(job.id)?.state).toBe("complete");
   });
 
   it("after a worker restart, keeps access for the recovered job and removes the rest; a failed removal is retried", async () => {

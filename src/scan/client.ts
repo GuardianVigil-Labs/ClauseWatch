@@ -32,7 +32,7 @@ export function requestScan(plan: ScanPlan, origins: string[], held: string[], s
   void saved.then(() => browser.runtime.sendMessage({ type: "scan:wake" })).catch(() => undefined);
   void Promise.all([saved, granted]).then(async ([, allowed]) => {
     if (!allowed) await browser.runtime.sendMessage({ type: "scan:cancel", id: job.id });
-    else await browser.runtime.sendMessage({ type: "scan:wake" });
+    else await browser.runtime.sendMessage({ type: "scan:wake", id: job.id });
   }).catch(() => undefined);
   return { job, saved, granted };
 }
