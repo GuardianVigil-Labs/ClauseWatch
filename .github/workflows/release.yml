@@ -200,6 +200,8 @@ jobs:
             local code status
             for _ in $(seq 120); do
               code=$(curl -sS -o "$out" -w '%{http_code}' --max-time 60 --retry 3 "${auth[@]}" "$1")
+              # Edge answers 202 while the operation is still running.
+              if [ "$code" = 202 ]; then sleep 10; continue; fi
               if [ "$code" != 200 ]; then
                 echo "::error::Edge Add-ons: $label status failed, HTTP $code $(jq -r '.message // empty' "$out" 2>/dev/null)"
                 return 1
@@ -244,8 +246,11 @@ jobs:
           if [ -n "$missing" ]; then echo "::error::Firefox Add-ons: missing secrets in the browser-stores environment:$missing"; exit 1; fi
           # web-ext signs a directory: the Firefox ZIP's exact contents.
           unzip -q packages/*-firefox.zip -d "$RUNNER_TEMP/firefox"
+          # Every listed version must name its licence on addons.mozilla.org.
+          echo '{"version":{"license":"Apache-2.0"}}' > "$RUNNER_TEMP/amo-metadata.json"
           npx --yes web-ext@10.8.0 sign --channel listed \
             --source-dir "$RUNNER_TEMP/firefox" --artifacts-dir "$RUNNER_TEMP/web-ext" \
+            --amo-metadata "$RUNNER_TEMP/amo-metadata.json" \
             --upload-source-code "$(ls packages/*-sources.zip)" \
             --approval-timeout 0 --timeout 900000
 
