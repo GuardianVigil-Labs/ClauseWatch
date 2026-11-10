@@ -4,7 +4,7 @@ All notable changes to ClauseWatch. Versions follow [semantic versioning](https:
 
 ## [Unreleased]
 
-These changes describe the source checkout and are not a published release.
+## [1.1.0] — 2026-11-10
 
 ### Releases
 
