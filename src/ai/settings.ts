@@ -7,6 +7,9 @@ export function aiEndpoint(baseUrl: string): string {
   return new URL("chat/completions", url.href.endsWith("/") ? url.href : `${url.href}/`).href;
 }
 
+/** The host access an API key setting uses, as a permission origin; empty when none. */
+export const aiOrigin = (s: AiSettings | undefined) => (s?.mode === "key" && URL.canParse(s.baseUrl) ? `${new URL(s.baseUrl).origin}/*` : "");
+
 export function keySettings(current: AiSettings, base: string, model: string, entered: string, choice: string): AiSettings & { mode: "key" } {
   const credentialEndpoint = aiEndpoint(base);
   if (!model.trim()) throw new Error("Enter a model name.");

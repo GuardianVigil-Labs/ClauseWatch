@@ -81,6 +81,12 @@ export class ScanJobs {
   private controllers = new Map<string, AbortController>();
   /** Waiting jobs whose permission request has finished granted. Memory only: after a worker restart they wait until expiry. */
   private answered = new Set<string>();
+  /**
+   * Origins AI settings no longer use, removed by releasePermissions once no
+   * active job needs them. Memory only: a worker restart before then leaves
+   * the access granted until the user removes it.
+   */
+  private retired = new Set<string>();
   private now: () => number;
   constructor(private io: JobIO) { this.now = io.now ?? Date.now; }
 
@@ -102,6 +108,12 @@ export class ScanJobs {
     this.dirty = true;
     if (!this.running) this.running = this.drain().finally(() => { this.running = null; });
     return this.running;
+  }
+
+  /** Gives back access another part of the extension no longer uses, through the same queue as job access. */
+  retire(origins: string[]): Promise<void> {
+    for (const origin of origins) this.retired.add(origin);
+    return this.wake();
   }
 
   /** May run while another job is fetching: expiry must not wait for its queue. */
@@ -156,8 +168,9 @@ export class ScanJobs {
       }
       await this.releasePermissions();
       await this.prune();
+      // Inside the loop: a job saved while the timer is being cleared sets dirty and gets its timer back.
+      await this.io.pending?.((await this.io.store.list()).length > 0);
     } while (this.dirty);
-    await this.io.pending?.((await this.io.store.list()).length > 0);
   }
 
   private async run(job: ScanJob): Promise<void> {
@@ -241,11 +254,13 @@ export class ScanJobs {
     const jobs = await this.io.store.list();
     const inUse = new Set(jobs.filter(activeJob).flatMap((j) => j.origins));
     const done = jobs.filter((j) => !activeJob(j) && !j.released && !j.addedOrigins.some((o) => inUse.has(o)));
-    const origins = [...new Set(done.flatMap((j) => j.addedOrigins))];
+    const retired = [...this.retired].filter((o) => !inUse.has(o));
+    const origins = [...new Set([...done.flatMap((j) => j.addedOrigins), ...retired])];
     if (origins.length) {
       // A failed removal is retried on the next wake; the jobs stay unreleased.
       try { await this.io.release(origins); } catch { return; }
     }
+    for (const origin of retired) this.retired.delete(origin);
     for (const job of done) { if (this.now() - job.at >= JOB_TTL_MS) clearPayload(job); job.released = true; await this.io.store.put(job); }
   }
 

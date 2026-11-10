@@ -11,6 +11,8 @@ import { BUNDLED } from "../src/engine/bundled";
 import { compileRules } from "../src/engine/rules";
 import { applyRuleEdit, type RuleEdit, loadRules } from "../src/engine/rule-set";
 import { currentRulesFile, refreshRules } from "../src/engine/rules-update";
+import { aiOrigin } from "../src/ai/settings";
+import type { AiSettings } from "../src/ai/assist";
 import { asAddress, MAX_PASTED, scanOrigins, scanTargets, siteOf } from "../src/ui/scan";
 
 import { ScanJobs, FOCUS_KEY, JOB_PREFIX, newJob, type ScanPlan } from "../src/scan/jobs";
@@ -95,7 +97,11 @@ const scans = new ScanJobs({
   store: jobStore,
   allowed: (origins) => browser.permissions.contains({ origins }).catch(() => false),
   release: async (origins) => {
-    if (!(await browser.permissions.contains({ origins: AUTO_ORIGINS }))) await browser.permissions.remove({ origins });
+    if (await browser.permissions.contains({ origins: AUTO_ORIGINS })) return;
+    // The address AI settings use now is theirs, whichever request first granted it.
+    const ai = aiOrigin((await kv.get("ai")) as AiSettings | undefined);
+    const free = origins.filter((o) => o !== ai);
+    if (free.length) await browser.permissions.remove({ origins: free });
   },
   fetch: (url, sites, signal, room) => fetchChosen(url, sites, signal, room),
   completed: (job) => openResult(job.id),
@@ -225,7 +231,7 @@ export default defineBackground(() => {
   browser.runtime.onMessage.addListener((message: unknown, sender) => {
     // Only the extension's own pages and content scripts.
     if (sender.id !== browser.runtime.id) return;
-    const m = message as { type?: string; key?: unknown; url?: unknown; site?: unknown; documents?: unknown; id?: unknown; edit?: unknown };
+    const m = message as { type?: string; origin?: unknown; key?: unknown; url?: unknown; site?: unknown; documents?: unknown; id?: unknown; edit?: unknown };
     if (m?.type === "auto:state") return automaticAllowed().catch(() => false);
     // A sign-up field was focused in a frame: add the reader to that frame only.
     const tabId = sender.tab?.id;
@@ -273,6 +279,7 @@ export default defineBackground(() => {
       return editingRules;
     }
     if (extensionPage && m?.type === "scan:wake") { void wakeScans(typeof m.id === "string" ? m.id : undefined); return Promise.resolve(true); }
+    if (extensionPage && m?.type === "ai:release" && typeof m.origin === "string") { void ready.then(() => scans.retire([m.origin as string])).catch(() => undefined); return Promise.resolve(true); }
     if (extensionPage && m?.type === "scan:cancel" && typeof m.id === "string") return ready.then(() => scans.cancel(m.id as string));
     const tabSite = sender.tab && sender.url && URL.canParse(sender.url) && /^https?:/.test(sender.url) ? new URL(sender.url).hostname.replace(/^www\./, "") : null;
     // The key says what the documents are read with; a put whose key is no longer current is dropped.

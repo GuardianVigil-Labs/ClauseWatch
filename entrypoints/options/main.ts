@@ -3,7 +3,7 @@
 import { kv } from "../../src/storage";
 import { AUTO_ORIGINS } from "../../src/auto/background";
 import { builtInModel, type AiSettings } from "../../src/ai/assist";
-import { aiEndpoint, keySettings } from "../../src/ai/settings";
+import { aiEndpoint, aiOrigin, keySettings } from "../../src/ai/settings";
 import { mutedSites, unmute } from "../../src/ui/sites";
 import { redrawRules, renderRules, rulesSaving } from "./rules";
 import { REPOSITORY_URL, SHARE_URL } from "../../src/ui/share";
@@ -127,14 +127,15 @@ async function renderAi() {
   aiEl.replaceChildren(s);
 }
 
-const aiOrigin = (s: AiSettings) => (s.mode === "key" && URL.canParse(s.baseUrl) ? `${new URL(s.baseUrl).origin}/*` : "");
-
-/** Gives back the previous AI address's access once settings no longer use it, unless automatic mode holds every site. */
+/**
+ * Hands the previous AI address back once settings no longer use it. The
+ * background removes it, as it does scan access: never while a scan uses it,
+ * while automatic mode holds every site, or while AI settings use it again.
+ */
 async function releaseAiOrigin(before: AiSettings, after: AiSettings): Promise<void> {
   const old = aiOrigin(before);
   if (!old || old === aiOrigin(after)) return;
-  if (await browser.permissions.contains({ origins: AUTO_ORIGINS }).catch(() => false)) return;
-  await browser.permissions.remove({ origins: [old] }).catch(() => undefined);
+  await browser.runtime.sendMessage({ type: "ai:release", origin: old }).catch(() => undefined);
 }
 
 /**

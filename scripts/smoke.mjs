@@ -644,9 +644,15 @@ try {
   await externalViewer.goto(`chrome-extension://${new URL(w.url()).host}/popup.html`);
   await externalViewer.getByRole("tab", { name: "This site" }).click();
   await externalViewer.getByRole("checkbox", { name: /Privacy: https:\/\/legal.provider.example\/privacy/ }).check();
+  const jobsBefore = new Set((await scanJobs()).map((job) => job.id));
   await externalViewer.getByRole("button", { name: "Read selected policies", exact: true }).click();
-  await externalViewer.getByRole("button", { name: "Scan again", exact: true }).waitFor();
-  check(readerRequests.includes("https://legal.provider.example/privacy"), "explicitly selected external policy hosts can be read");
+  // Wait for this request's own job to end: a "Scan again" button may still belong to the previous report.
+  let externalJob;
+  for (const until = Date.now() + 15000; Date.now() < until; await externalViewer.waitForTimeout(100)) {
+    externalJob = (await scanJobs()).find((job) => !jobsBefore.has(job.id) && job.plan.targets.some((t) => t.url === "https://legal.provider.example/privacy"));
+    if (externalJob && externalJob.state !== "waiting" && externalJob.state !== "running") break;
+  }
+  check(externalJob?.state === "complete" && readerRequests.includes("https://legal.provider.example/privacy"), `explicitly selected external policy hosts can be read (${externalJob?.state ?? "no job"})`);
   await externalViewer.close();
   await dynamic.locator("#policy").click();
   const controlViewer = await auto.newPage();

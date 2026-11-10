@@ -248,6 +248,22 @@ describe("independent background scans", () => {
     expect(pending).toHaveBeenLastCalledWith(false);
   });
 
+  it("keeps the timer for a job saved while the empty queue is clearing it", async () => {
+    const x = setup(); x.allowed.mockResolvedValue(false);
+    let alarm = true;
+    const job = newJob(plan(), [origin], [origin], "scan", 1000);
+    let late: Promise<void> | undefined;
+    const runner: ScanJobs = new ScanJobs({ ...x.io, pending: async (any) => {
+      if (any) { alarm = true; return; }
+      // The job arrives and wakes the queue while the timer is being cleared.
+      if (!late) { await x.store.put(job); late = runner.wake(); }
+      alarm = false;
+    } });
+    await runner.wake(); await late;
+    expect(x.records.get(job.id)?.state).toBe("waiting");
+    expect(alarm).toBe(true);
+  });
+
   it("does not checkpoint a download that finishes after the job expires", async () => {
     const x = setup();
     const job = newJob(plan(), [origin], [origin], "scan", 1000);
@@ -295,6 +311,19 @@ describe("temporary access release", () => {
     expect(x.release).toHaveBeenCalledExactlyOnceWith([origin]);
     expect(x.records.get(done.id)?.released).toBe(true);
     expect(x.records.get(waiting.id)?.released).toBeUndefined();
+  });
+
+  it("gives back access AI settings retired only once no active scan uses it", async () => {
+    const x = setup(); x.allowed.mockResolvedValue(false);
+    // The scan counted the AI address as held, so it never adds it to its own release.
+    const scan = newJob(plan(), [origin], [], "scan", 1000);
+    await x.store.put(scan);
+    await x.runner.retire([origin]);
+    expect(x.release).not.toHaveBeenCalled();
+    await x.runner.cancel(scan.id);
+    expect(x.release).toHaveBeenCalledExactlyOnceWith([origin]);
+    await x.runner.wake();
+    expect(x.release).toHaveBeenCalledTimes(1);
   });
 
   it("never removes access a running job uses, and still removes it after that job ends even if it counted it as held", async () => {

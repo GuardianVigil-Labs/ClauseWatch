@@ -10,10 +10,11 @@ async function open(stored: unknown) {
   document.body.innerHTML = ["automatic", "ai", "rules", "sites", "about-host"].map((id) => `<div id="${id}"></div>`).join("");
   const data: Record<string, unknown> = { ai: stored };
   const permissions = { request: vi.fn(async () => true), remove: vi.fn(async () => true), contains: vi.fn(async () => false) };
+  const sendMessage = vi.fn(async (_m: unknown) => ({ ok: true }));
   vi.stubGlobal("browser", {
     storage: { local: { get: async (k: string) => ({ [k]: data[k] }), set: async (o: Record<string, unknown>) => { Object.assign(data, o); } }, onChanged: { addListener: () => {} } },
     permissions,
-    runtime: { getURL: (p: string) => p, sendMessage: async () => ({ ok: true }) },
+    runtime: { getURL: (p: string) => p, sendMessage },
     tabs: { create: async () => {} },
   });
   await import("../entrypoints/options/main");
@@ -21,7 +22,8 @@ async function open(stored: unknown) {
   const ai = document.getElementById("ai")!;
   const field = (label: string) => ai.querySelector<HTMLInputElement & HTMLSelectElement>(`[aria-label="${label}"]`)!;
   const save = async () => { [...ai.querySelectorAll("button")].find((b) => b.textContent === "Save")!.click(); await flush(); await flush(); };
-  return { data, permissions, field, save, ai };
+  const released = () => sendMessage.mock.calls.map(([m]) => m).filter((m) => (m as { type?: string }).type === "ai:release");
+  return { data, permissions, field, save, ai, released };
 }
 afterEach(() => { document.body.replaceChildren(); vi.unstubAllGlobals(); });
 
@@ -46,30 +48,30 @@ describe("AI settings", () => {
     expect(x.ai.textContent).toContain("Choose a credential");
   });
 
-  it("gives back the previous AI address's access when the address changes or AI is turned off", async () => {
+  it("hands the previous AI address to the background when the address changes or AI is turned off, never removing it itself", async () => {
     const saved = { mode: "key", baseUrl: "https://old.example/v1", model: "m", apiKey: "saved-key", credentialEndpoint: aiEndpoint("https://old.example/v1") };
     const x = await open(saved);
     input(x.field("API address"), "https://new.example/v1");
     input(x.field("API key"), "new-key");
     await x.save();
     expect(x.data.ai).toMatchObject({ baseUrl: "https://new.example/v1", apiKey: "new-key" });
-    expect(x.permissions.remove).toHaveBeenCalledExactlyOnceWith({ origins: ["https://old.example/*"] });
+    expect(x.released()).toEqual([{ type: "ai:release", origin: "https://old.example/*" }]);
     input(x.field("AI help"), "off", "change");
     await x.save();
     expect(x.data.ai).toEqual({ mode: "off" });
-    expect(x.permissions.remove).toHaveBeenLastCalledWith({ origins: ["https://new.example/*"] });
+    expect(x.released()).toEqual([{ type: "ai:release", origin: "https://old.example/*" }, { type: "ai:release", origin: "https://new.example/*" }]);
+    // A scan may still be using the address: only the background's scan queue removes access.
+    expect(x.permissions.remove).not.toHaveBeenCalled();
   });
 
-  it("keeps the address's access when only the path changes, and while automatic mode holds every site", async () => {
+  it("keeps the address's access when only the path changes", async () => {
     const saved = { mode: "key", baseUrl: "https://old.example/v1", model: "m", apiKey: "saved-key", credentialEndpoint: aiEndpoint("https://old.example/v1") };
     const x = await open(saved);
     input(x.field("API address"), "https://old.example/v2");
     input(x.field("API key"), "new-key");
     await x.save();
     expect(x.data.ai).toMatchObject({ baseUrl: "https://old.example/v2" });
-    x.permissions.contains.mockResolvedValue(true);
-    input(x.field("AI help"), "off", "change");
-    await x.save();
+    expect(x.released()).toEqual([]);
     expect(x.permissions.remove).not.toHaveBeenCalled();
   });
 });
